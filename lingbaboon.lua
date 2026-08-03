@@ -185,26 +185,13 @@ end
 do
 local AllowedUsers = {
 	LockedScriptUsers = {
-		mxnkyhpc5015 = true,
-		m4rymeqw = true, --มิวสิค
-		FERN_18157 = true, --ลูกค้า
-		Tans24fe = true, --ลูกค้า
-		nigon001 = true, --ลูกค้า
-		zonebuxx29 = true, --ลูกค้า
+		Gi345267 = true,
+		OoShinobiPKoO = true,
+		ViewOwO = true,
 	},
-	quut16pkbn34 = true,
-	mxnkyhpc5015 = true,
-	FERN_18157 = true, --ลูกค้า
-	zonebuxx29 = true, --ลูกค้า
-	Sleep223450 = true, --ลูกค้า
-	m4rymeqw = true, --มิวสิค
-	Achirada3 = true, --ลูกค้า
-	fewkung2580 = true, --ลูกค้า
-	OoShinobiPKoO = true, --ลูกค้า
-	nigon001 = true, --ลูกค้า
-	ufmn88zmuh19 = true, --ให้เทส
-	F_fort240 = true, --จ้างฟาม
-	Tans24fe = true --ลูกค้า
+	Gi345267 = true,
+	OoShinobiPKoO = true,
+	ViewOwO = true,
 }
 
 if not (LocalPlayer and AllowedUsers[LocalPlayer.Name]) then
