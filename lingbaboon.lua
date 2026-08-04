@@ -187,11 +187,11 @@ local AllowedUsers = {
 	LockedScriptUsers = {
 		Gi345267 = true,
 		OoShinobiPKoO = true,
-		ViewOwO = true,
+		VIEWOwO = true,
 	},
 	Gi345267 = true,
 	OoShinobiPKoO = true,
-	ViewOwO = true,
+	VEIWOwO = true,
 }
 
 if not (LocalPlayer and AllowedUsers[LocalPlayer.Name]) then
