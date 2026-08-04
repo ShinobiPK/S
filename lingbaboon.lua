@@ -191,7 +191,7 @@ local AllowedUsers = {
 	},
 	Gi345267 = true,
 	OoShinobiPKoO = true,
-	VEIWOwO = true,
+	VIEWOwO = true,
 }
 
 if not (LocalPlayer and AllowedUsers[LocalPlayer.Name]) then
