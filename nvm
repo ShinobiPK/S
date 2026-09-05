@@ -1,0 +1,144 @@
+-- ===================================================
+-- ALL-IN-ONE SCRIPT FOR DUNGEON / RAID
+-- Features:
+-- 1. Auto Join (ยิง Request ซ้ำทุก 5s เฉพาะใน Lobby + ไม่ยิง Remote มั่ว)
+-- 2. Anti-Freeze (แก้ปัญหา Teleport Fail จอยค้าง / Rejoin อัตโนมัติ)
+-- 3. Potato Graphics (ลดกราฟิก เพิ่ม FPS ลื่นๆ)
+-- ===================================================
+
+local TARGET_USERNAME = "ooshinobipkoo" -- ใส่ชื่อเป้าหมายตรงนี้
+local JOIN_INTERVAL = 5 -- ยิงคำขอซ้ำทุกๆ กี่วินาที (เฉพาะใน Lobby)
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TeleportService = game:GetService("TeleportService")
+local Lighting = game:GetService("Lighting")
+local LocalPlayer = Players.LocalPlayer
+
+-- ===================================================
+-- 1. POTATO GRAPHICS & FPS BOOST (ลดกราฟิกเพิ่ม FPS)
+-- ===================================================
+task.spawn(function()
+    pcall(function()
+        -- ปรับแสงและบรรยากาศให้เบาลง
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        
+        for _, v in pairs(Lighting:GetChildren()) do
+            if v:IsA("PostEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("ColorCorrectionEffect") or v:IsA("BloomEffect") then
+                v.Enabled = false
+            end
+        end
+
+        -- ปรับ Texture สิ่งก่อสร้างและแมพให้สเปกต่ำ
+        local function optimizeObj(obj)
+            if obj:IsA("BasePart") and not obj:IsA("MeshPart") then
+                obj.Material = Enum.Material.SmoothPlastic
+                obj.Reflectance = 0
+            elseif obj:IsA("Decal") or obj:IsA("Texture") then
+                obj.Destroy(obj)
+            elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") then
+                obj.Enabled = false
+            end
+        end
+
+        for _, obj in pairs(workspace:GetDescendants()) do
+            optimizeObj(obj)
+        end
+
+        workspace.DescendantAdded:Connect(optimizeObj)
+        print("[FPS Boost] ปรับกราฟิกเป็นแบบ Potato เรียบร้อย!")
+    end)
+end)
+
+-- ===================================================
+-- 2. ANTI-FREEZE & AUTO REJOIN (แก้ปัญหา Teleport Fail/จอยค้าง)
+-- ===================================================
+print("[Anti-Freeze] ระบบตรวจจับ Teleport Failed เริ่มทำงาน...")
+
+-- ดักจับเหตุการณ์เมื่อ Roblox แจ้งเตือน Teleport Fail
+TeleportService.TeleportInitFailed:Connect(function(player, teleportResult, errorMessage)
+    if player == LocalPlayer then
+        warn("[Anti-Freeze] การ Teleport ล้มเหลว: " .. tostring(errorMessage))
+        print("[Anti-Freeze] กำลัง Rejoin กลับเข้าเกมใน 2 วินาที...")
+        task.wait(2)
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end
+end)
+
+-- ตรวจจับกรณี UI ค้าง/จอดำระหว่างวาร์ป
+task.spawn(function()
+    while true do
+        task.wait(12)
+        local gui = LocalPlayer:FindFirstChild("PlayerGui")
+        if not gui then
+            warn("[Anti-Freeze] ไม่พบ PlayerGui (ค้างหน้าจอดำ) กำลัง Rejoin...")
+            TeleportService:Teleport(game.PlaceId, LocalPlayer)
+            break
+        end
+    end
+end)
+
+-- ===================================================
+-- 3. AUTO JOIN REQUEST (รันซ้ำเฉพาะใน Lobby)
+-- ===================================================
+task.spawn(function()
+    print("[Auto Join] ระบบ Auto Join เริ่มทำงาน...")
+
+    while true do
+        -- เช็คว่ายังอยู่ใน Lobby หรือไม่ (ถ้า UI หลักของ Lobby หายไปแปลว่าเข้า Dungeon แล้ว)
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        local isLobby = playerGui and (playerGui:FindFirstChild("mainInterface") or playerGui:FindFirstChild("queueGui"))
+
+        if not isLobby then
+            print("[Auto Join] ตรวจพบว่าย้ายเข้า Dungeon แล้ว -> หยุดยิงคำขอเพื่อป้องกันปุ่มเด้ง!")
+            break -- หยุดลูป Auto Join ทันที
+        end
+
+        print("[Auto Join] กำลังส่ง Request หา: " .. TARGET_USERNAME)
+
+        -- ยิง RemoteEvent เฉพาะที่เกี่ยวกับการ Join/Request เท่านั้น (ไม่ยิง swap, slot, create)
+        local foundRemote = false
+        for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
+            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                local name = obj.Name:lower()
+                local isJoinRemote = (name:find("request") or name:find("join")) 
+                                 and not name:find("swap") 
+                                 and not name:find("slot") 
+                                 and not name:find("create")
+
+                if isJoinRemote then
+                    if obj:IsA("RemoteEvent") then
+                        obj:FireServer(TARGET_USERNAME)
+                    elseif obj:IsA("RemoteFunction") then
+                        pcall(function() obj:InvokeServer(TARGET_USERNAME) end)
+                    end
+                    foundRemote = true
+                end
+            end
+        end
+
+        -- ถ้ายิง Remote ไม่เจอ ค่อยลองส่งผ่าน UI ช่อง TextBox
+        if not foundRemote then
+            for _, gui in pairs(LocalPlayer.PlayerGui:GetDescendants()) do
+                if gui:IsA("TextBox") then
+                    if gui.Name:lower():find("user") or gui.PlaceholderText:lower():find("user") or gui.Parent.Name:lower():find("join") then
+                        gui.Text = TARGET_USERNAME
+                        local parent = gui.Parent
+                        if parent then
+                            for _, child in pairs(parent:GetChildren()) do
+                                if child:IsA("GuiButton") and (child.Name:lower():find("send") or child.Name:lower():find("request")) then
+                                    for _, conn in pairs(getconnections(child.MouseButton1Click)) do
+                                        conn:Fire()
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        task.wait(JOIN_INTERVAL)
+    end
+end)
