@@ -1,9 +1,9 @@
 -- ===================================================
--- STANDALONE LEVEL MILESTONE AUTO-REJOIN (SMART TRACKER)
+-- STANDALONE LEVEL MILESTONE AUTO-REJOIN (VIRTUAL CLICK)
 -- Game ID: 77649408247578
 -- ===================================================
 
-local LOBBY_PLACE_ID = 77649408247578 -- Place ID ของ Lobby
+local LOBBY_PLACE_ID = 77649408247578
 local LEVEL_MILESTONES = {
     65, 70, 75, 80, 85, 90, 95, 100, 
     105, 110, 115, 120, 125, 130, 135, 140, 
@@ -12,6 +12,10 @@ local LEVEL_MILESTONES = {
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local GuiService = game:GetService("GuiService")
+
 local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 10)
 
@@ -22,8 +26,8 @@ screenGui.ResetOnSpawn = false
 if PlayerGui then screenGui.Parent = PlayerGui end
 
 local statusLabel = Instance.new("TextLabel")
-statusLabel.Size = UDim2.new(0, 320, 0, 40)
-statusLabel.Position = UDim2.new(0.5, -160, 0, 10)
+statusLabel.Size = UDim2.new(0, 340, 0, 40)
+statusLabel.Position = UDim2.new(0.5, -170, 0, 10)
 statusLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 statusLabel.BackgroundTransparency = 0.3
 statusLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
@@ -34,6 +38,79 @@ statusLabel.Parent = screenGui
 local function updateStatus(txt, color)
     statusLabel.Text = "[Lvl Tracker] " .. txt
     if color then statusLabel.TextColor3 = color end
+end
+
+-- ฟังก์ชันจำลองคลิกเมาส์ตรงกลางปุ่มบนหน้าจอ
+local function clickAtPosition(x, y)
+    VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
+    task.wait(0.05)
+    VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
+end
+
+-- ฟังก์ชันบังคับออกจากดันเจี้ยนแบบครอบคลุมทุกช่องทาง
+local function forceLeaveToLobby()
+    -- 1. ยิง RemoteEvent ทั้งหมดใน ReplicatedStorage
+    for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            local name = obj.Name:lower()
+            if name:find("leave") or name:find("lobby") or name:find("exit") or name:find("return") then
+                if obj:IsA("RemoteEvent") then
+                    pcall(function() obj:FireServer() end)
+                    pcall(function() obj:FireServer(true) end)
+                elseif obj:IsA("RemoteFunction") then
+                    pcall(function() obj:InvokeServer() end)
+                    pcall(function() obj:InvokeServer(true) end)
+                end
+            end
+        end
+    end
+
+    -- 2. ค้นหาปุ่ม YES ใน UI ทั้งหมด (รวมถึงใน CoreGui)
+    local foundBtn = false
+    local targetGuis = {LocalPlayer:FindFirstChild("PlayerGui"), game:GetService("CoreGui")}
+    
+    for _, container in pairs(targetGuis) do
+        if container then
+            for _, btn in pairs(container:GetDescendants()) do
+                if btn:IsA("GuiButton") and btn.Visible then
+                    local text = (btn:IsA("TextButton") and btn.Text:upper()) or ""
+                    local name = btn.Name:lower()
+                    
+                    if text == "YES" or name == "yes" or name:find("confirm") then
+                        foundBtn = true
+                        -- ใช้ getconnections
+                        for _, conn in pairs(getconnections(btn.MouseButton1Click)) do pcall(function() conn:Fire() end) end
+                        for _, conn in pairs(getconnections(btn.Activated)) do pcall(function() conn:Fire() end) end
+                        
+                        -- ถ้ามีตำแหน่ง AbsolutePosition ให้คลิกจริง
+                        pcall(function()
+                            local pos = btn.AbsolutePosition
+                            local size = btn.AbsoluteSize
+                            clickAtPosition(pos.X + (size.X / 2), pos.Y + (size.Y / 2) + 36)
+                        end)
+                    end
+                end
+            end
+        end
+    end
+
+    -- 3. ถ้าหาปุ่มด้วยโค้ดไม่เจอ ให้จำลองคลิกตรงกลางฝั่งซ้ายของป๊อปอัป (ตำแหน่งปุ่ม YES ของป๊อปอัป "Return to Lobby?")
+    if not foundBtn then
+        local camera = workspace.CurrentCamera
+        if camera then
+            local viewportSize = camera.ViewportSize
+            -- ตำแหน่งปุ่ม YES ตามสเกลหน้าต่างแจ้งเตือนกลางจอ
+            local yesX = viewportSize.X * 0.44
+            local yesY = viewportSize.Y * 0.58
+            clickAtPosition(yesX, yesY)
+        end
+    end
+
+    -- 4. สั่ง TeleportService สำรองปิดท้าย
+    task.wait(1)
+    pcall(function()
+        TeleportService:Teleport(LOBBY_PLACE_ID, LocalPlayer)
+    end)
 end
 
 -- ฟังก์ชันดึงค่าเลเวลปัจจุบัน
@@ -63,34 +140,31 @@ end
 -- ลูปทำงานหลัก
 task.spawn(function()
     local isRejoining = false
-    local startDungeonLevel = nil -- ตัวแปรจำเลเวลแรกสุดตอนเข้าด่าน
+    local startDungeonLevel = nil
 
     while true do
         task.wait(1.5)
         if isRejoining then break end
 
-        -- เช็คว่าอยู่ใน Dungeon หรือไม่ (ถ้า PlaceId ไม่ตรงกับ Lobby แสดงว่าอยู่ใน Dungeon)
         local isInDungeon = (game.PlaceId ~= LOBBY_PLACE_ID)
 
         if isInDungeon then
             local currentLvl = getExactLevel()
 
             if currentLvl then
-                -- ถ้าเพิ่งเข้าด่านมา ให้บันทึกเลเวลตั้งต้นไว้ก่อน
                 if not startDungeonLevel then
                     startDungeonLevel = currentLvl
                 end
 
-                updateStatus(string.format("ในดันเจี้ยน | เริ่มที่เวล: %d | ปัจจุบัน: %d", startDungeonLevel, currentLvl), Color3.fromRGB(0, 255, 127))
+                updateStatus(string.format("ในดันเจี้ยน | เริ่มที่: %d | ปัจจุบัน: %d", startDungeonLevel, currentLvl), Color3.fromRGB(0, 255, 127))
 
-                -- ตรวจเช็คว่าเลเวลปัจจุบัน "สูงกว่าเลเวลตอนเริ่ม" และ "ไปแตะหมุดถัดไป" แล้วหรือยัง
                 if currentLvl > startDungeonLevel then
                     for _, milestone in ipairs(LEVEL_MILESTONES) do
                         if currentLvl >= milestone and startDungeonLevel < milestone then
                             isRejoining = true
-                            updateStatus("เวลอัปแตะหมุด " .. milestone .. " แล้ว! กำลังออกไปเปลี่ยนด่าน...", Color3.fromRGB(255, 50, 50))
-                            task.wait(2)
-                            TeleportService:Teleport(LOBBY_PLACE_ID, LocalPlayer)
+                            updateStatus("เวลถึงหมุด " .. milestone .. " แล้ว! กำลังกดยืนยันกลับ Lobby...", Color3.fromRGB(255, 50, 50))
+                            
+                            forceLeaveToLobby()
                             break
                         end
                     end
@@ -99,7 +173,7 @@ task.spawn(function()
                 updateStatus("กำลังค้นหาค่า Level ในเกม...", Color3.fromRGB(255, 200, 0))
             end
         else
-            startDungeonLevel = nil -- รีเซ็ตค่าเมื่อกลับมาอยู่ Lobby
+            startDungeonLevel = nil
             updateStatus("อยู่ใน Lobby (ปิดระบบตรวจจับ)", Color3.fromRGB(255, 255, 0))
         end
     end
