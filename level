@@ -1,38 +1,34 @@
 -- ===================================================
--- STANDALONE LEVEL MILESTONE AUTO-REJOIN SCRIPT
+-- STANDALONE LEVEL MILESTONE AUTO-REJOIN (FIXED)
 -- Game ID: 77649408247578
 -- ===================================================
 
 local GAME_PLACE_ID = 77649408247578
--- รายชื่อหมุดเลเวลอัปเดตใหม่ทั้งหมด
 local LEVEL_MILESTONES = {
     65, 70, 75, 80, 85, 90, 95, 100, 
-    105, 110, 115, 120, 125, 140, 145, 150, 155, 160, 165, 170, 175
+    105, 110, 115, 120, 125, 130, 135, 140, 
+    145, 150, 155, 160, 165, 170, 175
 }
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
-
--- รอให้ LocalPlayer และ PlayerGui โหลดสมบูรณ์ก่อนทำงาน กัน Error
 local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 10)
 
-local lastTriggeredLevel = 0
-
--- UI แจ้งเตือนสถานะบนหน้าจอ
+-- แถบสถานะบนหน้าจอ
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "MilestoneStatusGui"
 screenGui.ResetOnSpawn = false
 if PlayerGui then screenGui.Parent = PlayerGui end
 
 local statusLabel = Instance.new("TextLabel")
-statusLabel.Size = UDim2.new(0, 280, 0, 35)
-statusLabel.Position = UDim2.new(0.5, -140, 0, 10)
+statusLabel.Size = UDim2.new(0, 320, 0, 40)
+statusLabel.Position = UDim2.new(0.5, -160, 0, 10)
 statusLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-statusLabel.BackgroundTransparency = 0.4
+statusLabel.BackgroundTransparency = 0.3
 statusLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
 statusLabel.TextSize = 13
-statusLabel.Text = "[Lvl Tracker] กำลังเริ่มระบบตรวจจับเลเวล..."
+statusLabel.Text = "[Lvl Tracker] กำลังเริ่มระบบ..."
 statusLabel.Parent = screenGui
 
 local function updateStatus(txt, color)
@@ -40,11 +36,30 @@ local function updateStatus(txt, color)
     if color then statusLabel.TextColor3 = color end
 end
 
--- ฟังก์ชันเช็คว่าเลเวลปัจจุบันข้ามหมุดใหม่หรือยัง
-local function checkMilestone(lvl)
-    for _, milestone in ipairs(LEVEL_MILESTONES) do
-        if lvl >= milestone and lastTriggeredLevel < milestone then
-            return milestone
+-- ฟังก์ชันค้นหาเลเวลแบบครอบจักรวาล (ทั้ง leaderstats และ GUI หน้าจอ)
+local function getExactLevel()
+    -- 1. หาจาก leaderstats ทุกรูปแบบชื่อ
+    local leaderstats = LocalPlayer:FindFirstChild("leaderstats") or LocalPlayer:FindFirstChild("stats")
+    if leaderstats then
+        for _, child in pairs(leaderstats:GetChildren()) do
+            local name = child.Name:lower()
+            if name:find("level") or name:find("lvl") or name == "lv" then
+                return tonumber(child.Value)
+            end
+        end
+    end
+
+    -- 2. ถ้าใน leaderstats ไม่เจอ ให้ดึงตัวเลขจาก GUI บนหน้าจอ
+    local pGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if pGui then
+        for _, gui in pairs(pGui:GetDescendants()) do
+            if gui:IsA("TextLabel") and gui.Text and gui.Visible then
+                -- ดึงตัวเลขที่อยู่หลังคำว่า Lv. หรือ Level
+                local num = gui.Text:match("[Ll][Vv]%.?%s*(%d+)") or gui.Text:match("[Ll][Ee][Vv][Ee][Ll]%s*(%d+)")
+                if num then
+                    return tonumber(num)
+                end
+            end
         end
     end
     return nil
@@ -53,51 +68,43 @@ end
 -- ลูปตรวจจับการทำงาน
 task.spawn(function()
     local isRejoining = false
+    local hasTriggeredThisSession = false -- ตัวดักกัน Rejoin ซ้ำในเซสชันเดียว
 
     while true do
-        task.wait(2)
+        task.wait(1.5)
         if isRejoining then break end
 
         local pGui = LocalPlayer:FindFirstChild("PlayerGui")
-        -- เช็คว่าอยู่ใน Lobby หรือไม่ (มี mainInterface หรือ queueGui)
         local isLobby = pGui and (pGui:FindFirstChild("mainInterface") or pGui:FindFirstChild("queueGui"))
 
         if not isLobby and pGui then
-            -- ===================================
-            -- 1. ทำงานเฉพาะตอน "อยู่ในดันเจี้ยน"
-            -- ===================================
-            local currentLvl = nil
-            local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
-            if leaderstats then
-                local lvlObj = leaderstats:FindFirstChild("Level") or leaderstats:FindFirstChild("Lvl")
-                if lvlObj then currentLvl = lvlObj.Value end
-            end
+            -- อยู่ในดันเจี้ยน
+            local currentLvl = getExactLevel()
 
             if currentLvl then
-                local reachedMilestone = checkMilestone(currentLvl)
-                if reachedMilestone and not isRejoining then
-                    isRejoining = true
-                    lastTriggeredLevel = reachedMilestone
-                    updateStatus("เลเวลอัปถึง " .. reachedMilestone .. " แล้ว! กำลังกลับ Lobby...", Color3.fromRGB(255, 85, 85))
-                    task.wait(2)
-                    TeleportService:Teleport(GAME_PLACE_ID, LocalPlayer)
-                else
-                    updateStatus("กำลังฟาร์มในดันเจี้ยน (เวลปัจจุบัน: " .. currentLvl .. ")", Color3.fromRGB(0, 255, 127))
+                updateStatus("อยู่ในดันเจี้ยน | เวลปัจจุบัน: " .. currentLvl, Color3.fromRGB(0, 255, 127))
+
+                -- เช็คว่าเลเวลปัจจุบันแตะหมุดใดหมุดหนึ่งหรือไม่
+                if not hasTriggeredThisSession then
+                    for _, milestone in ipairs(LEVEL_MILESTONES) do
+                        if currentLvl >= milestone then
+                            -- บันทึกว่าในดันเจี้ยนนี้ถูกสั่ง Rejoin ไปแล้ว
+                            isRejoining = true
+                            hasTriggeredThisSession = true
+                            
+                            updateStatus("เวลถึง " .. milestone .. " แล้ว! กำลังกลับ Lobby...", Color3.fromRGB(255, 50, 50))
+                            task.wait(2)
+                            TeleportService:Teleport(GAME_PLACE_ID, LocalPlayer)
+                            break
+                        end
+                    end
                 end
+            else
+                updateStatus("กำลังค้นหาค่า Level ในเกม...", Color3.fromRGB(255, 200, 0))
             end
         else
-            -- ===================================
-            -- 2. ตอนอยู่ใน Lobby
-            -- ===================================
-            -- อัปเดตค่าเลเวลปัจจุบันไว้ตลอด เพื่อป้องกันการเด้งซ้ำตอนเพิ่งโหลดเข้า Lobby
-            local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
-            if leaderstats then
-                local lvlObj = leaderstats:FindFirstChild("Level") or leaderstats:FindFirstChild("Lvl")
-                if lvlObj then 
-                    lastTriggeredLevel = lvlObj.Value 
-                end
-            end
-            updateStatus("อยู่ใน Lobby (ปิดการ Rejoin ชั่วคราว)", Color3.fromRGB(255, 255, 0))
+            -- อยู่ใน Lobby
+            updateStatus("อยู่ใน Lobby (ปิดระบบตรวจจับ)", Color3.fromRGB(255, 255, 0))
         end
     end
 end)
