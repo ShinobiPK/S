@@ -1,5 +1,5 @@
 -- ===================================================
--- DUNGEON QUEST - AUTO READY LOOP (ไอดีไก่)
+-- DUNGEON QUEST - AUTO READY LOOP (FIXED)
 -- ===================================================
 
 local Players = game:GetService("Players")
@@ -10,6 +10,7 @@ local function clickButton(btn)
     if not btn then return false end
     
     local fired = false
+    -- 1. ยิงผ่าน Connection
     for _, eventName in ipairs({"MouseButton1Click", "MouseButton1Down", "Activated"}) do
         if btn[eventName] then
             for _, conn in pairs(getconnections(btn[eventName])) do
@@ -19,7 +20,8 @@ local function clickButton(btn)
         end
     end
     
-    if not fired and btn:IsA("GuiButton") and btn.AbsoluteSize.X > 0 then
+    -- 2. จำลองคลิกเมาส์ตำแหน่งจริง
+    if not fired and btn:IsA("GuiObject") and btn.AbsoluteSize.X > 0 then
         local pos = btn.AbsolutePosition
         local size = btn.AbsoluteSize
         local clickX = pos.X + (size.X / 2)
@@ -38,28 +40,28 @@ local function pressReadyButton()
     if not playerGui then return false end
 
     for _, obj in ipairs(playerGui:GetDescendants()) do
-        if obj:IsA("GuiButton") or obj:IsA("TextButton") or obj:IsA("ImageButton") then
+        -- เช็กทั้ง TextButton, ImageButton และ Frame ที่มีปุ่มซ้อนอยู่
+        if obj:IsA("TextButton") or obj:IsA("ImageButton") or obj:IsA("Button") then
             local btnName = obj.Name:lower()
             local btnText = (obj:IsA("TextButton") and obj.Text or ""):lower()
             
+            -- ถ้าเจอคำว่า ready ในชื่อหรือข้อความ
             if btnName:find("ready") or btnText:find("ready") then
-                if obj.Visible and obj.AbsoluteSize.X > 0 then
-                    clickButton(obj)
-                    return true
-                end
+                clickButton(obj)
+                return true
             end
         end
     end
     return false
 end
 
--- ลูปเช็กและกดรัวๆ ทุก 1 วินาที
+-- ลูปเช็กถี่ขึ้น ทุกๆ 0.5 วินาที เพื่อให้กดทันทีที่ปุ่มเด้งขึ้นมา
 task.spawn(function()
-    print("🟢 [Auto Ready Loop] เริ่มระบบวนลูปสแกนปุ่ม Ready แล้ว...")
+    print("🟢 [Auto Ready] เริ่มทำงานแบบเรียลไทม์แล้ว...")
     while true do
         pcall(function()
             pressReadyButton()
         end)
-        task.wait(1)
+        task.wait(0.5)
     end
 end)
