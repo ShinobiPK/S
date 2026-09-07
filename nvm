@@ -1,13 +1,13 @@
 -- ===================================================
--- ALL-IN-ONE SCRIPT FOR DUNGEON / RAID
+-- ALL-IN-ONE SCRIPT FOR DUNGEON / RAID (EXTREME POTATO)
 -- Features:
--- 1. Auto Join (ยิง Request ซ้ำทุก 5s เฉพาะใน Lobby + ไม่ยิง Remote มั่ว)
--- 2. Anti-Freeze (แก้ปัญหา Teleport Fail จอยค้าง / Rejoin อัตโนมัติ)
--- 3. Potato Graphics (ลดกราฟิก เพิ่ม FPS ลื่นๆ)
+-- 1. Ultimate FPS Booster (ลบทุกอย่างในแมพ เหลือแค่พื้นยืน + UI)
+-- 2. Anti-Freeze & Auto Rejoin (แก้ปัญหาวาร์ปค้าง / จอดำ)
+-- 3. Auto Join Request (ยิงคำขอเฉพาะใน Lobby)
 -- ===================================================
 
-local TARGET_USERNAME = "ooshinobipkoo" -- ใส่ชื่อเป้าหมายตรงนี้
-local JOIN_INTERVAL = 5 -- ยิงคำขอซ้ำทุกๆ กี่วินาที (เฉพาะใน Lobby)
+local TARGET_USERNAME = "ooshinobipkoo"
+local JOIN_INTERVAL = 5
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -16,57 +16,86 @@ local Lighting = game:GetService("Lighting")
 local LocalPlayer = Players.LocalPlayer
 
 -- ===================================================
--- 1. POTATO GRAPHICS & FPS BOOST (ลดกราฟิกเพิ่ม FPS)
+-- 1. EXTREME FPS BOOSTER (DESTROY EVERYTHING EXCEPT FLOOR)
 -- ===================================================
 task.spawn(function()
     pcall(function()
-        -- ปรับแสงและบรรยากาศให้เบาลง
+        -- 1.1 ปิดแสง 3D และเอฟเฟกต์บรรยากาศทั้งหมด
         Lighting.GlobalShadows = false
-        Lighting.FogEnd = 9e9
+        Lighting.FogEnd = 0
+        Lighting.Brightness = 0
+        Lighting.ClockTime = 12
         
         for _, v in pairs(Lighting:GetChildren()) do
-            if v:IsA("PostEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("ColorCorrectionEffect") or v:IsA("BloomEffect") then
-                v.Enabled = false
+            if v:IsA("PostEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("ColorCorrectionEffect") or v:IsA("BloomEffect") or v:IsA("Atmosphere") or v:IsA("Sky") then
+                v:Destroy()
             end
         end
 
-        -- ปรับ Texture สิ่งก่อสร้างและแมพให้สเปกต่ำ
-        local function optimizeObj(obj)
-            if obj:IsA("BasePart") and not obj:IsA("MeshPart") then
+        -- 1.2 ฟังก์ชันลบองค์ประกอบฉากและซ่อน Object
+        local function purgeObject(obj)
+            -- ข้ามการลบถ้าเป็นตัวละครผู้เล่น หรือ Camera
+            if obj:IsDescendantOf(workspace:FindFirstChild("Terrain") or workspace) then
+                local char = LocalPlayer.Character
+                if char and obj:IsDescendantOf(char) then return end
+                for _, player in pairs(Players:GetPlayers()) do
+                    if player.Character and obj:IsDescendantOf(player.Character) then return end
+                end
+            end
+
+            -- ลบ Texture, Decal, Light, Particle, Sound และ Visual Effect ทั้งหมด
+            if obj:IsA("Decal") or obj:IsA("Texture") or obj:IsA("ParticleEmitter") or 
+               obj:IsA("Trail") or obj:IsA("Beam") or obj:IsA("Fire") or obj:IsA("Smoke") or 
+               obj:IsA("Sparkles") or obj:IsA("Light") or obj:IsA("Sound") or obj:IsA("SpecialMesh") then
+                obj:Destroy()
+            
+            -- ปรับแต่ง BasePart ให้เป็นแค่บล็อกเรียบๆ ไม่มีสี/มิติ
+            elseif obj:IsA("BasePart") then
                 obj.Material = Enum.Material.SmoothPlastic
                 obj.Reflectance = 0
-            elseif obj:IsA("Decal") or obj:IsA("Texture") then
-                obj.Destroy(obj)
-            elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") then
-                obj.Enabled = false
+                obj.CastShadow = false
+                
+                -- ลบ Part ประดับฉากที่ไม่ใช่พื้นยืน (CanCollide = false)
+                if not obj.CanCollide and obj.Name ~= "HumanoidRootPart" then
+                    obj:Destroy()
+                end
             end
         end
 
+        -- เคลียร์สิ่งที่มีอยู่แล้วใน Workspace
         for _, obj in pairs(workspace:GetDescendants()) do
-            optimizeObj(obj)
+            purgeObject(obj)
         end
 
-        workspace.DescendantAdded:Connect(optimizeObj)
-        print("[FPS Boost] ปรับกราฟิกเป็นแบบ Potato เรียบร้อย!")
+        -- ดักจับ Object ใหม่ที่โหลดเข้ามาให้โดนลบทันที
+        workspace.DescendantAdded:Connect(purgeObject)
+        
+        -- ปิดการประมวลผล Terrain 3D
+        if workspace:FindFirstChildOfClass("Terrain") then
+            local terrain = workspace:FindFirstChildOfClass("Terrain")
+            terrain.WaterWaveSize = 0
+            terrain.WaterWaveSpeed = 0
+            terrain.WaterReflectance = 0
+            terrain.WaterTransparency = 0
+        end
+
+        print("[Extreme FPS] เคลียร์ฉากแมพเรียบร้อย เหลือเฉพาะพื้นยืนและ UI!")
     end)
 end)
 
 -- ===================================================
--- 2. ANTI-FREEZE & AUTO REJOIN (แก้ปัญหา Teleport Fail/จอยค้าง)
+-- 2. ANTI-FREEZE & AUTO REJOIN
 -- ===================================================
 print("[Anti-Freeze] ระบบตรวจจับ Teleport Failed เริ่มทำงาน...")
 
--- ดักจับเหตุการณ์เมื่อ Roblox แจ้งเตือน Teleport Fail
 TeleportService.TeleportInitFailed:Connect(function(player, teleportResult, errorMessage)
     if player == LocalPlayer then
         warn("[Anti-Freeze] การ Teleport ล้มเหลว: " .. tostring(errorMessage))
-        print("[Anti-Freeze] กำลัง Rejoin กลับเข้าเกมใน 2 วินาที...")
         task.wait(2)
         TeleportService:Teleport(game.PlaceId, LocalPlayer)
     end
 end)
 
--- ตรวจจับกรณี UI ค้าง/จอดำระหว่างวาร์ป
 task.spawn(function()
     while true do
         task.wait(12)
@@ -80,24 +109,22 @@ task.spawn(function()
 end)
 
 -- ===================================================
--- 3. AUTO JOIN REQUEST (รันซ้ำเฉพาะใน Lobby)
+-- 3. AUTO JOIN REQUEST
 -- ===================================================
 task.spawn(function()
     print("[Auto Join] ระบบ Auto Join เริ่มทำงาน...")
 
     while true do
-        -- เช็คว่ายังอยู่ใน Lobby หรือไม่ (ถ้า UI หลักของ Lobby หายไปแปลว่าเข้า Dungeon แล้ว)
         local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
         local isLobby = playerGui and (playerGui:FindFirstChild("mainInterface") or playerGui:FindFirstChild("queueGui"))
 
         if not isLobby then
-            print("[Auto Join] ตรวจพบว่าย้ายเข้า Dungeon แล้ว -> หยุดยิงคำขอเพื่อป้องกันปุ่มเด้ง!")
-            break -- หยุดลูป Auto Join ทันที
+            print("[Auto Join] ย้ายเข้า Dungeon แล้ว -> หยุดยิงคำขอ!")
+            break
         end
 
         print("[Auto Join] กำลังส่ง Request หา: " .. TARGET_USERNAME)
 
-        -- ยิง RemoteEvent เฉพาะที่เกี่ยวกับการ Join/Request เท่านั้น (ไม่ยิง swap, slot, create)
         local foundRemote = false
         for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
             if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
@@ -118,7 +145,6 @@ task.spawn(function()
             end
         end
 
-        -- ถ้ายิง Remote ไม่เจอ ค่อยลองส่งผ่าน UI ช่อง TextBox
         if not foundRemote then
             for _, gui in pairs(LocalPlayer.PlayerGui:GetDescendants()) do
                 if gui:IsA("TextBox") then
