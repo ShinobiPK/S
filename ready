@@ -1,0 +1,66 @@
+-- ===================================================
+-- DUNGEON QUEST - AUTO CLICK READY BUTTON
+-- ===================================================
+
+local Players = game:GetService("Players")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
+
+-- ฟังก์ชันสำหรับคลิกปุ่ม UI
+local function clickButton(btn)
+    if not btn then return false end
+    
+    local fired = false
+    -- 1. ยิงผ่าน Event Connection
+    for _, eventName in ipairs({"MouseButton1Click", "MouseButton1Down", "Activated"}) do
+        if btn[eventName] then
+            for _, conn in pairs(getconnections(btn[eventName])) do
+                conn:Fire()
+                fired = true
+            end
+        end
+    end
+    
+    -- 2. จำลองคลิกบนตำแหน่งจริงของจอ (ถ้า Connection ไม่ทำงาน)
+    if not fired and btn:IsA("GuiButton") and btn.AbsoluteSize.X > 0 then
+        local pos = btn.AbsolutePosition
+        local size = btn.AbsoluteSize
+        local clickX = pos.X + (size.X / 2)
+        local clickY = pos.Y + (size.Y / 2) + 36 -- ชดเชยแถบ TopBar
+        VirtualInputManager:SendMouseButtonEvent(clickX, clickY, 0, true, game, 1)
+        task.wait(0.05)
+        VirtualInputManager:SendMouseButtonEvent(clickX, clickY, 0, false, game, 1)
+        fired = true
+    end
+    
+    return fired
+end
+
+-- ฟังก์ชันค้นหาและกดปุ่ม Ready
+local function pressReadyButton()
+    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if not playerGui then return false end
+
+    -- กวาดหา UI ทุกชิ้นใน PlayerGui ที่น่าจะเป็นปุ่ม Ready
+    for _, obj in ipairs(playerGui:GetDescendants()) do
+        if obj:IsA("GuiButton") or obj:IsA("TextButton") or obj:IsA("ImageButton") then
+            local btnName = obj.Name:lower()
+            local btnText = (obj:IsA("TextButton") and obj.Text or ""):lower()
+            
+            -- เช็กว่าชื่อปุ่มหรือข้อความบนปุ่มมีคำว่า "ready" หรือไม่
+            if btnName:find("ready") or btnText:find("ready") then
+                if obj.Visible and obj.AbsoluteSize.X > 0 then
+                    print("✅ [Auto Ready] เจอปุ่ม Ready: " .. obj:GetFullName())
+                    clickButton(obj)
+                    return true
+                end
+            end
+        end
+    end
+    
+    warn("⚠️ [Auto Ready] ยังไม่พบปุ่ม Ready บนหน้าจอ")
+    return false
+end
+
+-- รันกด Ready ทันที
+pressReadyButton()
