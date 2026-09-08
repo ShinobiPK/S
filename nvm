@@ -7,7 +7,7 @@
 -- 4. Auto Sell System (ขายของ + กด YES ยืนยันอัตโนมัติ)
 -- ===================================================
 
-local TARGET_USERNAME = "ooshinobipkoo"
+local TARGET_USERNAME = "viewowo"
 local JOIN_INTERVAL = 5
 
 local Players = game:GetService("Players")
