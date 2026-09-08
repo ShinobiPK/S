@@ -4,6 +4,7 @@
 -- 1. Ultimate FPS Booster (ลบทุกอย่างในแมพ เหลือแค่พื้นยืน + UI)
 -- 2. Anti-Freeze & Auto Rejoin (แก้ปัญหาวาร์ปค้าง / จอดำ)
 -- 3. Auto Join Request (ยิงคำขอเฉพาะใน Lobby)
+-- 4. Auto Sell System (ขายของ + กด YES ยืนยันอัตโนมัติ)
 -- ===================================================
 
 local TARGET_USERNAME = "ooshinobipkoo"
@@ -13,6 +14,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TeleportService = game:GetService("TeleportService")
 local Lighting = game:GetService("Lighting")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 
 -- ===================================================
@@ -130,9 +132,9 @@ task.spawn(function()
             if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
                 local name = obj.Name:lower()
                 local isJoinRemote = (name:find("request") or name:find("join")) 
-                                 and not name:find("swap") 
-                                 and not name:find("slot") 
-                                 and not name:find("create")
+                                     and not name:find("swap") 
+                                     and not name:find("slot") 
+                                     and not name:find("create")
 
                 if isJoinRemote then
                     if obj:IsA("RemoteEvent") then
@@ -167,4 +169,91 @@ task.spawn(function()
 
         task.wait(JOIN_INTERVAL)
     end
+end)
+
+-- ===================================================
+-- 4. AUTO SELL SYSTEM
+-- ===================================================
+getgenv().AutoSellActive = true
+
+local function clickButton(btn)
+    if not btn or not btn:IsA("GuiObject") then return false end
+    
+    local fired = false
+    for _, eventName in ipairs({"MouseButton1Click", "MouseButton1Down", "Activated"}) do
+        if btn[eventName] then
+            for _, conn in pairs(getconnections(btn[eventName])) do
+                conn:Fire()
+                fired = true
+            end
+        end
+    end
+    
+    if not fired and btn.AbsoluteSize.X > 0 then
+        local pos = btn.AbsolutePosition
+        local size = btn.AbsoluteSize
+        local clickX = pos.X + (size.X / 2)
+        local clickY = pos.Y + (size.Y / 2) + 36
+        VirtualInputManager:SendMouseButtonEvent(clickX, clickY, 0, true, game, 1)
+        task.wait(0.05)
+        VirtualInputManager:SendMouseButtonEvent(clickX, clickY, 0, false, game, 1)
+        fired = true
+    end
+    return fired
+end
+
+local function processSell()
+    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if not playerGui then return end
+
+    -- 4.1 ถ้ามีปุ่ม YES เด้งอยู่ ให้พุ่งไปกด YES ก่อนเลยทันที
+    for _, obj in ipairs(playerGui:GetDescendants()) do
+        if obj:IsA("TextButton") or obj:IsA("ImageButton") or obj:IsA("Button") then
+            local btnName = obj.Name:lower()
+            local btnText = (obj:IsA("TextButton") and obj.Text or ""):lower()
+            
+            if (btnName == "yes" or btnText == "yes") and obj.AbsoluteSize.X > 0 and obj.Visible then
+                print("✅ [Auto Sell] เจอปุ่ม YES! กำลังกดเพื่อยืนยัน...")
+                clickButton(obj)
+                task.wait(1.5)
+                return
+            end
+        end
+    end
+
+    -- 4.2 ถ้าไม่มี YES ให้ทำงานกับ sellShop
+    local sellShop = playerGui:FindFirstChild("sellShop")
+    if not sellShop or not sellShop.Enabled then return end
+
+    local rarityFrame = sellShop:FindFirstChild("rarityButtonsFrame", true)
+    local sellButton = sellShop:FindFirstChild("sellButton", true)
+
+    if rarityFrame then
+        local safeRarities = {"CommonButton", "UncommonButton", "RareButton", "EpicButton"}
+        for _, btnName in ipairs(safeRarities) do
+            local btn = rarityFrame:FindFirstChild(btnName)
+            if btn and btn.AbsoluteSize.X > 0 then
+                clickButton(btn)
+                task.wait(0.4)
+            end
+        end
+    end
+
+    -- 4.3 กดปุ่มขาย ($)
+    if sellButton and sellButton.AbsoluteSize.X > 0 then
+        task.wait(0.5)
+        clickButton(sellButton)
+        print("💰 [Auto Sell] กดปุ่มขาย ($) เรียบร้อย รอหน้าต่าง YES...")
+    end
+end
+
+task.spawn(function()
+    print("🟢 [Auto Sell System] เริ่มทำงานระบบขายของ...")
+    while getgenv().AutoSellActive do
+        pcall(function()
+            processSell()
+        end)
+        task.wait(4)
+    end
+    print("🔴 [Auto Sell System] หยุดการทำงานแล้ว")
 end)
